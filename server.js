@@ -106,9 +106,9 @@ setInterval(processActiveSessions, 2000);
 
 app.get('/api/session/current', async (req, res) => {
   try {
-    const [rows] = await db.query(
-      `SELECT * FROM study_sessions WHERE status IN ('active', 'paused') ORDER BY id DESC LIMIT 1`
-    );
+const [rows] = await db.query(
+  `SELECT * FROM study_sessions WHERE status IN ('active', 'paused', 'long_interruption') ORDER BY id DESC LIMIT 1`
+);
     if (rows.length === 0) return res.json({ session: null });
 
     const session = rows[0];
@@ -216,10 +216,13 @@ app.post('/api/session/end', async (req, res) => {
 app.get('/api/analytics/summary', async (req, res) => {
   try {
     const [dailyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE DATE(start_time) = CURDATE()`);
-    const [dailyInterruptionCount] = await db.query(`SELECT COUNT(*) as total FROM pause_intervals WHERE DATE(pause_start) = CURDATE()`);
-    const [dailyInterruptionTime] = await db.query(`
-      SELECT SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))) as total FROM pause_intervals WHERE DATE(pause_start) = CURDATE()
-    `);
+    const [dailyInterruptionCount] = await db.query(
+  `SELECT COUNT(*) as total FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND pause_type = 'short'`
+);
+const [dailyInterruptionTime] = await db.query(`
+  SELECT SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))) as total 
+  FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND pause_type = 'short'
+`);
     const [weeklyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`);
     const [monthlyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`);
 
@@ -256,6 +259,19 @@ app.get('/api/history', async (req, res) => {
       session.pauses = pauses;
     }
     res.json({ history: sessions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/session/long-interrupt', async (req, res) => {
+  const { sessionId, activeSeconds, statusReason } = req.body;
+  const newStatus = statusReason === 'target_not_achieved' ? 'target_not_achieved' : 'long_interruption';
+  try {
+    await db.query(`UPDATE pause_intervals SET pause_end = NOW() WHERE session_id = ? AND pause_end IS NULL`, [sessionId]);
+    await db.query(`UPDATE study_sessions SET status = ?, total_active_seconds = ?, end_time = NOW() WHERE id = ?`, [newStatus, activeSeconds, sessionId]);
+    await db.query(`INSERT INTO pause_intervals (session_id, pause_start, pause_end, pause_type) VALUES (?, NOW(), NOW(), 'long_term')`, [sessionId]);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

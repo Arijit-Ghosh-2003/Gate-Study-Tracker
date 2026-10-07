@@ -280,3 +280,28 @@ app.post('/api/session/long-interrupt', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Mission GATE 2027 Tracker running at http://localhost:${PORT}`);
 });
+
+// ADD THIS DEBUG ENDPOINT TO server.js
+app.get('/api/debug-db', async (req, res) => {
+  try {
+    const [dbInfo] = await db.query('SELECT DATABASE() as current_db, USER() as current_user');
+    const [tables] = await db.query('SHOW TABLES');
+    res.json({
+      status: 'Connected successfully!',
+      connection: dbInfo[0],
+      tables: tables
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'Connection failed',
+      error: err.message,
+      code: err.code,
+      env_check: {
+        host: process.env.DB_HOST ? 'Set' : 'Missing',
+        port: process.env.DB_PORT || 'Defaulting to 3306',
+        user: process.env.DB_USER || 'Missing',
+        db_name: process.env.DB_NAME || 'Missing'
+      }
+    });
+  }
+});

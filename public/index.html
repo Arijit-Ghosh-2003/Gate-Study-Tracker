@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎯 Mission GATE 2027 - Study & Practice Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    
+    <!-- Top Banner with Daily Metrics -->
+    <header class="top-banner">
+      <div class="title-section">
+        <h1>🎯 Mission GATE 2027</h1>
+        <p class="subtitle">Focused Preparation & Exam Practice Tracker</p>
+      </div>
+
+      <div class="top-metrics-grid">
+        <div class="stat-badge primary-badge">
+          <span class="stat-label">TODAY'S STUDY TIME</span>
+          <span id="top-daily-time" class="stat-value">0h 0m</span>
+        </div>
+        <div class="stat-badge warning-badge">
+          <span class="stat-label">DAILY BREAKS COUNT</span>
+          <span id="top-daily-break-count" class="stat-value">0</span>
+        </div>
+        <div class="stat-badge danger-badge">
+          <span class="stat-label">DAILY BREAK TIME</span>
+          <span id="top-daily-break-time" class="stat-value">0m</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Session Configuration & Active Timer Card -->
+    <section class="card timer-card">
+      <div id="session-setup" class="session-form-container">
+        <div class="mode-toggle-group">
+          <label class="radio-label">
+            <input type="radio" name="session_mode" value="study" checked>
+            <span>📖 Study / Learning Session</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="session_mode" value="practice_exam">
+            <span>📝 Practice Exam / Test Series</span>
+          </label>
+        </div>
+
+        <form id="start-form" class="inputs-grid">
+          <div class="input-field">
+            <label id="lbl-subject">Subject Name</label>
+            <input type="text" id="inp-subject" placeholder="e.g. DBMS, Operating Systems, Algo..." required />
+          </div>
+
+          <div class="input-field">
+            <label id="lbl-topic">Chapter / Topic Name</label>
+            <input type="text" id="inp-topic" placeholder="e.g. B+ Trees, Process Sync, Dynamic Prog..." required />
+          </div>
+
+          <div class="input-field">
+            <label id="lbl-platform">Platform / Source</label>
+            <input type="text" id="inp-platform" placeholder="e.g. YouTube, NPTEL, MadeEasy, LeetCode..." required />
+          </div>
+
+          <div class="input-field">
+            <label id="lbl-target">Session Target / Goal</label>
+            <input type="text" id="inp-target" placeholder="e.g. Complete 25 PYQs, Finish 2 lectures..." />
+          </div>
+
+          <div class="input-field">
+            <label id="lbl-type">Type / Category</label>
+            <select id="inp-type"></select>
+          </div>
+
+        <div class="input-field">
+          <label>Target Timer Duration</label>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+              <input type="number" id="inp-target-hrs" min="0" max="24" value="1" style="width: 100%;" />
+              <span style="color: #94a3b8; font-weight: bold; font-size: 0.9rem;">hrs</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+              <input type="number" id="inp-target-mins" min="0" max="59" value="0" style="width: 100%;" />
+              <span style="color: #94a3b8; font-weight: bold; font-size: 0.9rem;">mins</span>
+            </div>
+          </div>
+        </div>
+
+          <div class="form-actions">
+            <button type="submit" id="start-btn" class="btn primary">Start Mission Session</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Active Running Session Screen -->
+      <div id="active-session" class="session-display hidden">
+        <div class="session-header">
+          <span class="badge" id="status-badge">STUDYING</span>
+          <span class="badge-mode" id="mode-display-badge">STUDY</span>
+          <h2 id="current-topic-display">Topic Name</h2>
+          <p id="current-meta-display" class="meta-subtext">Subject • Platform • Target</p>
+        </div>
+
+        <!-- Dual Timers Grid -->
+        <div class="dual-timers">
+          <div class="timer-box">
+            <span class="timer-label">⏱️ ACTIVE TIME ELAPSED</span>
+            <div class="timer-display" id="timer-display">00:00:00</div>
+          </div>
+
+          <div class="timer-box target-box" id="target-timer-container">
+            <span class="timer-label">⏳ TARGET COUNTDOWN TIMER</span>
+            <div class="timer-display target-display" id="target-countdown-display">00:00:00</div>
+            <span class="timer-subtext" id="target-status-subtext">Runs only during active study</span>
+          </div>
+        </div>
+
+        <!-- Target Notification Alert Box (Shown when Target Reaches 0) -->
+        <div id="target-reached-alert" class="alert-box hidden">
+          🎯 <strong>Target Time Reached!</strong> Would you like to extend your session target?
+          <div class="extend-btns">
+            <button class="btn extend-btn" data-mins="15">+15 Mins</button>
+            <button class="btn extend-btn" data-mins="30">+30 Mins</button>
+            <button class="btn extend-btn" data-mins="60">+60 Mins</button>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="pause-btn" class="btn warning">Interrupt / Pause</button>
+          <button id="resume-btn" class="btn success hidden">Resume Session</button>
+          <button id="extend-custom-btn" class="btn secondary">+ Extend Target</button>
+          <button id="end-btn" class="btn danger">End Session</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analytics Dashboard (Heatmap + Side Stats) -->
+    <section class="card analytics-card">
+      <div class="analytics-layout">
+        <div class="heatmap-section">
+          <div class="card-header">
+            <h3>🔥 365-Day Study Activity Heatmap</h3>
+            <span class="subtext">Daily study volume distribution</span>
+          </div>
+          <div id="heatmap-container" class="heatmap-grid"></div>
+          <!-- LeetCode-style Floating Tooltip Popup -->
+          <div id="heatmap-tooltip" class="heatmap-tooltip hidden"></div>
+          <!-- AFTER (What to replace it with) -->
+          <div class="heatmap-legend">
+            <div class="legend-item"><span class="square lvl-0"></span> 0m</div>
+            <div class="legend-item"><span class="square lvl-1"></span> &lt;30m</div>
+            <div class="legend-item"><span class="square lvl-2"></span> 30m</div>
+            <div class="legend-item"><span class="square lvl-3"></span> 45m</div>
+            <div class="legend-item"><span class="square lvl-4"></span> 1h</div>
+            <div class="legend-item"><span class="square lvl-5"></span> 2h</div>
+            <div class="legend-item"><span class="square lvl-6"></span> 3h</div>
+            <div class="legend-item"><span class="square lvl-7"></span> 6h</div>
+            <div class="legend-item"><span class="square lvl-8"></span> 8h</div>
+            <div class="legend-item"><span class="square lvl-9"></span> 10h</div>
+            <div class="legend-item"><span class="square lvl-10"></span> 12h</div>
+            <div class="legend-item"><span class="square lvl-11"></span> 16h+</div>
+          </div>
+        </div>
+
+        <div class="stats-sidebar">
+          <div class="side-stat-card">
+            <div class="icon">📅</div>
+            <div>
+              <span class="side-stat-label">This Week (7 Days)</span>
+              <div id="stat-weekly-time" class="side-stat-value">0h 0m</div>
+            </div>
+          </div>
+
+          <div class="side-stat-card">
+            <div class="icon">🗓️</div>
+            <div>
+              <span class="side-stat-label">This Month (30 Days)</span>
+              <div id="stat-monthly-time" class="side-stat-value">0h 0m</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Detailed History Session -->
+    <section class="card">
+      <h3>📜 Session History & Time Variance Analysis</h3>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Mode & Subject</th>
+              <th>Topic / Chapter & Platform</th>
+              <th>Type & Goal</th>
+              <th>Active Duration</th>
+              <th>Target vs Actual Variance</th>
+              <th>Break / Interruption Logs</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr><td colspan="6" class="text-center">Loading GATE history...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

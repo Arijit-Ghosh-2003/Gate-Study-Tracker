@@ -130,6 +130,9 @@
           <button id="resume-btn" class="btn success hidden">Resume Session</button>
           <button id="extend-custom-btn" class="btn secondary">+ Extend Target</button>
           <button id="end-btn" class="btn danger">End Session</button>
+          <!-- Add inside <div class="controls"> -->
+          <button id="long-break-btn" class="btn indigo">☕ Long-Term Break</button>
+          <button id="target-unachieved-btn" class="btn dark-danger">❌ Target Unachieved</button>
         </div>
       </div>
     </section>
@@ -206,5 +209,20 @@
   </div>
 
   <script src="app.js"></script>
+
+  <!-- Continuation Modal Popup -->
+<div id="continuation-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-icon">⏳</span>
+      <h3>Interrupted Session Detected</h3>
+    </div>
+    <p id="modal-session-info">You have a previously suspended study session.</p>
+    <div class="modal-actions">
+      <button id="modal-resume-btn" class="btn success">▶️ Continue Previous Session</button>
+      <button id="modal-new-btn" class="btn danger">🆕 Start New Session</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

@@ -284,7 +284,7 @@ app.listen(PORT, () => {
 // ADD THIS DEBUG ENDPOINT TO server.js
 app.get('/api/debug-db', async (req, res) => {
   try {
-    const [dbInfo] = await db.query('SELECT DATABASE() as current_db, USER() as current_user');
+    const [dbInfo] = await db.query('SELECT DATABASE() as current_db, USER() as connected_user');
     const [tables] = await db.query('SHOW TABLES');
     res.json({
       status: 'Connected successfully!',

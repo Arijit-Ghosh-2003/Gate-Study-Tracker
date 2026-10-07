@@ -35,3 +35,11 @@ ALTER TABLE study_sessions
 ADD COLUMN notified_50 TINYINT DEFAULT 0,
 ADD COLUMN notified_75 TINYINT DEFAULT 0,
 ADD COLUMN notified_100 TINYINT DEFAULT 0;
+
+-- 1. Expand session status ENUM
+ALTER TABLE study_sessions 
+MODIFY COLUMN status ENUM('active', 'paused', 'long_interruption', 'target_not_achieved', 'completed', 'terminated') DEFAULT 'active';
+
+-- 2. Add pause type classification
+ALTER TABLE pause_intervals 
+ADD COLUMN pause_type ENUM('short', 'long_term') DEFAULT 'short';

@@ -43,3 +43,9 @@ MODIFY COLUMN status ENUM('active', 'paused', 'long_interruption', 'target_not_a
 -- 2. Add pause type classification
 ALTER TABLE pause_intervals 
 ADD COLUMN pause_type ENUM('short', 'long_term') DEFAULT 'short';
+
+-- Select * from study_sessions;
+
+-- update study_sessions
+-- set status='target_not_achieved'
+-- where id in (3,4);

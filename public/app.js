@@ -607,6 +607,7 @@ async function loadHeatmap() {
   }
 }
 // 7. Load History Table with Time Variance
+// REPLACE loadHistory() in public/app.js WITH THIS:
 async function loadHistory() {
   const res = await fetch('/api/history');
   const { history } = await res.json();
@@ -625,10 +626,15 @@ async function loadHistory() {
     const activeMins = Math.floor(item.total_active_seconds / 60);
     const totalTargetMins = Math.floor(((item.target_duration_seconds || 0) + (item.extended_duration_seconds || 0)) / 60);
     
-    // Variance calculation
     const deltaMins = activeMins - totalTargetMins;
     let deltaHtml = '';
-    if (totalTargetMins === 0) {
+
+    // Check session status FIRST before calculating target math
+    if (item.status === 'long_interruption') {
+      deltaHtml = '<span class="delta-tag delta-longbreak">☕ Long Break</span>';
+    } else if (item.status === 'target_not_achieved') {
+      deltaHtml = '<span class="delta-tag delta-unachieved">❌ Target Unachieved</span>';
+    } else if (totalTargetMins === 0) {
       deltaHtml = '<span class="delta-tag">No Target</span>';
     } else if (deltaMins > 0) {
       deltaHtml = `<span class="delta-tag delta-extended">+${deltaMins}m Extended</span>`;
@@ -638,16 +644,19 @@ async function loadHistory() {
       deltaHtml = `<span class="delta-tag" style="background:#334155;">Exact Target</span>`;
     }
 
-    // Interruption logs
+    // Filter out long_term pauses from the break list
     let pauseHtml = '<span style="color: #64748b;">No breaks</span>';
     if (item.pauses && item.pauses.length > 0) {
-      pauseHtml = '<ul class="pause-list">';
-      item.pauses.forEach((p, idx) => {
-        const pStart = new Date(p.pause_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const pEnd = p.pause_end ? new Date(p.pause_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ongoing';
-        pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
-      });
-      pauseHtml += '</ul>';
+      const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
+      if (shortPauses.length > 0) {
+        pauseHtml = '<ul class="pause-list">';
+        shortPauses.forEach((p, idx) => {
+          const pStart = new Date(p.pause_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const pEnd = p.pause_end ? new Date(p.pause_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ongoing';
+          pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
+        });
+        pauseHtml += '</ul>';
+      }
     }
 
     const modeBadge = `<span class="badge" style="background: ${item.session_mode === 'practice_exam' ? '#8b5cf6' : '#3b82f6'}">${item.session_mode.toUpperCase().replace('_', ' ')}</span>`;

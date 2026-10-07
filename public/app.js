@@ -1,3 +1,72 @@
+// =============================================================
+// PASTE THIS AT THE VERY TOP (LINE 1) OF public/app.js
+// =============================================================
+const SoundEngine = {
+  ctx: null,
+  init() {
+    if (!this.ctx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) this.ctx = new AudioCtx();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  playClick() {
+    this.init();
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(1000, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.04);
+    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.04);
+    osc.connect(gain); gain.connect(this.ctx.destination);
+    osc.start(); osc.stop(this.ctx.currentTime + 0.04);
+  },
+  playHalftime() {
+    this.init(); if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    [523.25, 659.25].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.2, now + idx * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.15 + 0.3);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(now + idx * 0.15); osc.stop(now + idx * 0.15 + 0.3);
+    });
+  },
+  playQuarter() {
+    this.init(); if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    [0, 0.15].forEach(delay => {
+      const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+      osc.type = 'triangle'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.25, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.1);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(now + delay); osc.stop(now + delay + 0.1);
+    });
+  },
+  playFinish() {
+    this.init(); if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.2, now + idx * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.5);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(now + idx * 0.12); osc.stop(now + idx * 0.12 + 0.5);
+    });
+  }
+};
+
+function triggerHapticFeedback(ms = 15) {
+  if ('vibrate' in navigator) navigator.vibrate(ms);
+}
+
+// =============================================================
+// YOUR EXISTING CODE CONTINUES HERE BELOW
+// =============================================================
+
 let currentSession = null;
 let timerInterval = null;
 let heartbeatInterval = null;
@@ -31,6 +100,20 @@ document.addEventListener('DOMContentLoaded', () => {
       extendTargetTime(mins);
     });
   });
+  
+    // Universal click audio + haptics listener
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('button') || e.target.closest('.btn') || e.target.closest('input[type="radio"]')) {
+      SoundEngine.playClick();
+      triggerHapticFeedback(15);
+    }
+  });
+
+  // New button listeners
+  document.getElementById('long-break-btn').addEventListener('click', () => triggerLongInterrupt('long_interruption'));
+  document.getElementById('target-unachieved-btn').addEventListener('click', () => triggerLongInterrupt('target_not_achieved'));
+  document.getElementById('modal-resume-btn').addEventListener('click', handleModalResume);
+  document.getElementById('modal-new-btn').addEventListener('click', handleModalNewSession);
 });
 
 async function init() {
@@ -109,6 +192,7 @@ async function loadLastInputs() {
 }
 
 // 3. Load Active or Interrupted Session
+// REPLACE your existing loadCurrentSession() with this:
 async function loadCurrentSession() {
   const res = await fetch('/api/session/current');
   const data = await res.json();
@@ -122,16 +206,65 @@ async function loadCurrentSession() {
       const now = new Date();
       const elapsedSinceHeartbeat = Math.max(0, Math.floor((now - lastHeartbeat) / 1000));
       activeSeconds += elapsedSinceHeartbeat;
+      renderActiveSessionUI();
       startTimer();
-    } else {
-      updateTimerDisplay();
-      showPauseState();
+    } else if (currentSession.status === 'paused' || currentSession.status === 'long_interruption') {
+      // Show continuation popup when reopening an interrupted session
+      showContinuationModal(currentSession);
     }
-
-    renderActiveSessionUI();
   } else {
     showSetupUI();
   }
+}
+// PASTE THESE 4 FUNCTIONS DIRECTLY BELOW loadCurrentSession():
+
+function showContinuationModal(session) {
+  const modal = document.getElementById('continuation-modal');
+  const infoText = document.getElementById('modal-session-info');
+  infoText.innerHTML = `Previous session for <strong>${escapeHtml(session.topic)}</strong> (${escapeHtml(session.subject)}) was interrupted. Total active study time saved: <strong>${Math.floor(session.total_active_seconds / 60)} mins</strong>.`;
+  modal.classList.remove('hidden');
+}
+
+async function handleModalResume() {
+  document.getElementById('continuation-modal').classList.add('hidden');
+  renderActiveSessionUI();
+  await resumeSession();
+}
+
+async function handleModalNewSession() {
+  document.getElementById('continuation-modal').classList.add('hidden');
+  if (currentSession) {
+    await fetch('/api/session/end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: currentSession.id, activeSeconds, statusReason: 'target_not_achieved' })
+    });
+  }
+  currentSession = null;
+  activeSeconds = 0;
+  showSetupUI();
+  await loadSummaryAnalytics();
+  await loadHeatmap();
+  await loadHistory();
+}
+
+async function triggerLongInterrupt(reason) {
+  stopTimer();
+  if (!currentSession) return;
+
+  await fetch('/api/session/long-interrupt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: currentSession.id, activeSeconds, statusReason: reason })
+  });
+
+  currentSession = null;
+  activeSeconds = 0;
+  showSetupUI();
+
+  await loadSummaryAnalytics();
+  await loadHeatmap();
+  await loadHistory();
 }
 
 function renderActiveSessionUI() {
@@ -174,34 +307,53 @@ function stopTimer() {
   if (heartbeatInterval) clearInterval(heartbeatInterval);
 }
 
+// 🟢 REPLACE WITH THIS UPDATED VERSION IN public/app.js:
 function updateTimerDisplay() {
-  // Elapsed Time Display
+  // 1. Elapsed Active Time Display
   const hrs = String(Math.floor(activeSeconds / 3600)).padStart(2, '0');
   const mins = String(Math.floor((activeSeconds % 3600) / 60)).padStart(2, '0');
   const secs = String(activeSeconds % 60).padStart(2, '0');
   document.getElementById('timer-display').innerText = `${hrs}:${mins}:${secs}`;
 
-  // Target Countdown Calculation
+  // 2. Target Countdown & Audio Milestone Checks
   if (currentSession) {
     const totalTargetSecs = (currentSession.target_duration_seconds || 0) + (currentSession.extended_duration_seconds || 0);
     targetRemainingSeconds = totalTargetSecs - activeSeconds;
 
-    if (targetRemainingSeconds <= 0) {
-      document.getElementById('target-countdown-display').innerText = '00:00:00';
-      document.getElementById('target-status-subtext').innerText = '🎯 Target Time Reached!';
-      document.getElementById('target-reached-alert').classList.remove('hidden');
+    if (totalTargetSecs > 0) {
+      const progress = activeSeconds / totalTargetSecs;
 
-      if (!notificationFired) {
-        notificationFired = true;
-        triggerNotification();
+      // 50% Halftime Audio Milestone (Upward Chime)
+      if (progress >= 0.5 && progress < 0.75 && !milestone50Fired) {
+        milestone50Fired = true;
+        SoundEngine.playHalftime();
       }
-    } else {
-      document.getElementById('target-reached-alert').classList.add('hidden');
-      const tHrs = String(Math.floor(targetRemainingSeconds / 3600)).padStart(2, '0');
-      const tMins = String(Math.floor((targetRemainingSeconds % 3600) / 60)).padStart(2, '0');
-      const tSecs = String(targetRemainingSeconds % 60).padStart(2, '0');
-      document.getElementById('target-countdown-display').innerText = `${tHrs}:${tMins}:${tSecs}`;
-      document.getElementById('target-status-subtext').innerText = 'Runs only during active session';
+
+      // 75% Quarter Time Remaining Audio Milestone (Double Pulse)
+      if (progress >= 0.75 && progress < 1.0 && !milestone75Fired) {
+        milestone75Fired = true;
+        SoundEngine.playQuarter();
+      }
+
+      // 100% Target Completed Audio Milestone (Fanfare Chord + Haptics)
+      if (targetRemainingSeconds <= 0) {
+        document.getElementById('target-countdown-display').innerText = '00:00:00';
+        document.getElementById('target-status-subtext').innerText = '🎯 Target Time Reached!';
+        document.getElementById('target-reached-alert').classList.remove('hidden');
+
+        if (!milestone100Fired) {
+          milestone100Fired = true;
+          SoundEngine.playFinish();
+          triggerHapticFeedback([100, 50, 100]);
+        }
+      } else {
+        document.getElementById('target-reached-alert').classList.add('hidden');
+        const tHrs = String(Math.floor(targetRemainingSeconds / 3600)).padStart(2, '0');
+        const tMins = String(Math.floor((targetRemainingSeconds % 3600) / 60)).padStart(2, '0');
+        const tSecs = String(targetRemainingSeconds % 60).padStart(2, '0');
+        document.getElementById('target-countdown-display').innerText = `${tHrs}:${tMins}:${tSecs}`;
+        document.getElementById('target-status-subtext').innerText = 'Runs only during active session';
+      }
     }
   }
 }

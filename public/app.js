@@ -616,20 +616,28 @@ async function loadHistory() {
   tbody.innerHTML = '';
 
   if (history.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center">No session history recorded yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No session history recorded yet.</td></tr>';
     return;
   }
 
   history.forEach(item => {
     const row = document.createElement('tr');
     
+    // Format Start Date & Time
+    const startDateObj = new Date(item.start_time);
+    const formattedDate = startDateObj.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    const formattedTime = startDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     const activeMins = Math.floor(item.total_active_seconds / 60);
     const totalTargetMins = Math.floor(((item.target_duration_seconds || 0) + (item.extended_duration_seconds || 0)) / 60);
     
     const deltaMins = activeMins - totalTargetMins;
     let deltaHtml = '';
 
-    // Check session status FIRST before calculating target math
     if (item.status === 'long_interruption') {
       deltaHtml = '<span class="delta-tag delta-longbreak">☕ Long Break</span>';
     } else if (item.status === 'target_not_achieved') {
@@ -644,7 +652,6 @@ async function loadHistory() {
       deltaHtml = `<span class="delta-tag" style="background:#334155;">Exact Target</span>`;
     }
 
-    // Filter out long_term pauses from the break list
     let pauseHtml = '<span style="color: #64748b;">No breaks</span>';
     if (item.pauses && item.pauses.length > 0) {
       const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
@@ -662,6 +669,7 @@ async function loadHistory() {
     const modeBadge = `<span class="badge" style="background: ${item.session_mode === 'practice_exam' ? '#8b5cf6' : '#3b82f6'}">${item.session_mode.toUpperCase().replace('_', ' ')}</span>`;
 
     row.innerHTML = `
+      <td><strong>${formattedDate}</strong><br><small style="color:#94a3b8">${formattedTime}</small></td>
       <td>${modeBadge}<br><strong>${escapeHtml(item.subject)}</strong></td>
       <td><strong>${escapeHtml(item.topic)}</strong><br><small style="color:#94a3b8">${escapeHtml(item.platform)}</small></td>
       <td><strong>${escapeHtml(item.target_goal || 'None')}</strong><br><small style="color:#94a3b8">${escapeHtml(item.study_type)}</small></td>

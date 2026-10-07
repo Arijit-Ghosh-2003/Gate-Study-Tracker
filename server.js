@@ -47,20 +47,28 @@ function triggerSystemAlert(type, topicName, extraText) {
 // -------------------------------------------------------------
 async function processActiveSessions() {
   try {
-    // 1. Cleanup stale sessions if PC turned off (heartbeat missed > 35s)
+    // 1. Cleanup stale sessions if tab/app was abruptly closed without heartbeat (> 35s)
     const [staleSessions] = await db.query(
       `SELECT id, start_time, last_heartbeat FROM study_sessions WHERE status = 'active' AND last_heartbeat < NOW() - INTERVAL 35 SECOND`
     );
 
     for (const session of staleSessions) {
       const activeDelta = Math.max(0, Math.floor((new Date(session.last_heartbeat) - new Date(session.start_time)) / 1000));
+      
+      // Update session status to long_interruption instead of terminated
       await db.query(
-        `UPDATE study_sessions SET status = 'terminated', end_time = last_heartbeat, total_active_seconds = ? WHERE id = ?`,
+        `UPDATE study_sessions SET status = 'long_interruption', end_time = last_heartbeat, total_active_seconds = ? WHERE id = ?`,
         [activeDelta, session.id]
+      );
+      
+      // Log long-term pause interval
+      await db.query(
+        `INSERT INTO pause_intervals (session_id, pause_start, pause_end, pause_type) VALUES (?, NOW(), NOW(), 'long_term')`,
+        [session.id]
       );
     }
 
-    // 2. Calculate Milestones for Active Running Sessions
+    // 2. Check milestone notifications for running sessions
     const [activeSessions] = await db.query(
       `SELECT * FROM study_sessions WHERE status = 'active'`
     );
@@ -75,29 +83,22 @@ async function processActiveSessions() {
 
       const progress = liveSeconds / totalTargetSecs;
 
-      // 50% Milestone (Half Time)
       if (progress >= 0.5 && progress < 0.75 && !s.notified_50) {
         await db.query(`UPDATE study_sessions SET notified_50 = 1 WHERE id = ?`, [s.id]);
-        triggerSystemAlert('half', s.topic);
       }
 
-      // 75% Milestone (Quarter Time Left)
       if (progress >= 0.75 && progress < 1.0 && !s.notified_75) {
         await db.query(`UPDATE study_sessions SET notified_75 = 1 WHERE id = ?`, [s.id]);
-        triggerSystemAlert('quarter', s.topic);
       }
 
-      // 100% Milestone (Target Timer Ended)
       if (progress >= 1.0 && !s.notified_100) {
         await db.query(`UPDATE study_sessions SET notified_100 = 1 WHERE id = ?`, [s.id]);
-        triggerSystemAlert('end', s.topic, 'Open app to extend or complete session.');
       }
     }
   } catch (err) {
     console.error('Background worker error:', err.message);
   }
 }
-
 // Run checks every 2 seconds
 setInterval(processActiveSessions, 2000);
 

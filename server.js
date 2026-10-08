@@ -216,12 +216,13 @@ app.post('/api/session/end', async (req, res) => {
 app.get('/api/analytics/summary', async (req, res) => {
   try {
     const [dailyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE DATE(start_time) = CURDATE()`);
-    const [dailyInterruptionCount] = await db.query(
-  `SELECT COUNT(*) as total FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND pause_type = 'short'`
+// 🟢 NEW: Counts all breaks that are NOT long_term (matches history logic)
+const [dailyInterruptionCount] = await db.query(
+  `SELECT COUNT(*) as total FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND (pause_type IS NULL OR pause_type != 'long_term')`
 );
 const [dailyInterruptionTime] = await db.query(`
   SELECT SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))) as total 
-  FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND pause_type = 'short'
+  FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND (pause_type IS NULL OR pause_type != 'long_term')
 `);
     const [weeklyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`);
     const [monthlyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`);

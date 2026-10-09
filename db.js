@@ -7,6 +7,7 @@ const pool = mysql.createPool({
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'study_tracker',
+  timezone: '+05:30', // Forces MySQL connection to use IST offset
   ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' ? { rejectUnauthorized: false } : false,
   waitForConnections: true,
   connectionLimit: 10,

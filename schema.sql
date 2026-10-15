@@ -44,8 +44,22 @@ MODIFY COLUMN status ENUM('active', 'paused', 'long_interruption', 'target_not_a
 ALTER TABLE pause_intervals 
 ADD COLUMN pause_type ENUM('short', 'long_term') DEFAULT 'short';
 
--- Select * from study_sessions;
+Select * from study_sessions;
+Select * from pause_intervals;
 
 -- update study_sessions
 -- set status='target_not_achieved'
--- where id in (3,4);
+-- where id=7;
+
+-- Delete from study_sessions
+-- where id=11;
+
+-- SELECT 
+--     table_name AS `Table`,
+--     table_rows AS `Approximate Rows`,
+--     ROUND(data_length / 1024 / 1024, 2) AS `Data Size (MB)`,
+--     ROUND(index_length / 1024 / 1024, 2) AS `Index Size (MB)`,
+--     ROUND((data_length + index_length) / 1024 / 1024, 2) AS `Total Storage (MB)`,
+--     ROUND((data_length + index_length) / IFNULL(NULLIF(table_rows, 0), 1), 0) AS `Avg Bytes / Row`
+-- FROM information_schema.tables
+-- WHERE table_schema = 'study_tracker';

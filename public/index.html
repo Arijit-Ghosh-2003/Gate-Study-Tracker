@@ -149,20 +149,17 @@
           <!-- LeetCode-style Floating Tooltip Popup -->
           <div id="heatmap-tooltip" class="heatmap-tooltip hidden"></div>
           <!-- AFTER (What to replace it with) -->
-          <div class="heatmap-legend">
-            <div class="legend-item"><span class="square lvl-0"></span> 0m</div>
-            <div class="legend-item"><span class="square lvl-1"></span> &lt;30m</div>
-            <div class="legend-item"><span class="square lvl-2"></span> 30m</div>
-            <div class="legend-item"><span class="square lvl-3"></span> 45m</div>
-            <div class="legend-item"><span class="square lvl-4"></span> 1h</div>
-            <div class="legend-item"><span class="square lvl-5"></span> 2h</div>
-            <div class="legend-item"><span class="square lvl-6"></span> 3h</div>
-            <div class="legend-item"><span class="square lvl-7"></span> 6h</div>
-            <div class="legend-item"><span class="square lvl-8"></span> 8h</div>
-            <div class="legend-item"><span class="square lvl-9"></span> 10h</div>
-            <div class="legend-item"><span class="square lvl-10"></span> 12h</div>
-            <div class="legend-item"><span class="square lvl-11"></span> 16h+</div>
-          </div>
+            <!-- REPLACE <div class="heatmap-legend"> IN public/index.html WITH THIS: -->
+            <div class="heatmap-legend">
+              <div class="legend-item"><span class="square lvl-0"></span> 0m</div>
+              <div class="legend-item"><span class="square lvl-3"></span> 30m</div>
+              <div class="legend-item"><span class="square lvl-6"></span> 1h</div>
+              <div class="legend-item"><span class="square lvl-10"></span> 2h</div>
+              <div class="legend-item"><span class="square lvl-14"></span> 4h</div>
+              <div class="legend-item"><span class="square lvl-18"></span> 6h</div>
+              <div class="legend-item"><span class="square lvl-22"></span> 10h</div>
+              <div class="legend-item"><span class="square lvl-25"></span> 12h+</div>
+            </div>
         </div>
 
         <div class="stats-sidebar">

@@ -349,18 +349,41 @@ input[type="text"], input[type="number"], select {
   color: #38bdf8;
 }
 
-.square.lvl-0  { background-color: #1e293b; border: 1px solid #334155; }
-.square.lvl-1  { background-color: #064e3b; }
-.square.lvl-2  { background-color: #047857; }
-.square.lvl-3  { background-color: #059669; }
-.square.lvl-4  { background-color: #10b981; }
-.square.lvl-5  { background-color: #34d399; }
-.square.lvl-6  { background-color: #38bdf8; }
-.square.lvl-7  { background-color: #3b82f6; }
-.square.lvl-8  { background-color: #8b5cf6; }
-.square.lvl-9  { background-color: #d946ef; }
-.square.lvl-10 { background-color: #f43f5e; }
-.square.lvl-11 { background-color: #fbbf24; }
+/* REPLACE ALL .square.lvl-X RULES IN public/style.css WITH THIS: */
+.square.lvl-0  { background-color: #1e293b; border: 1px solid #334155; } /* 0m */
+
+/* 0 - 1h (Green spectrum) */
+.square.lvl-1  { background-color: #022c22; } /* 10m */
+.square.lvl-2  { background-color: #064e3b; } /* 20m */
+.square.lvl-3  { background-color: #047857; } /* 30m */
+.square.lvl-4  { background-color: #059669; } /* 40m */
+.square.lvl-5  { background-color: #10b981; } /* 50m */
+.square.lvl-6  { background-color: #34d399; } /* 1h  */
+
+/* 1h - 2h (Teal & Sky Blue spectrum) */
+.square.lvl-7  { background-color: #14b8a6; } /* 1h 15m */
+.square.lvl-8  { background-color: #06b6d4; } /* 1h 30m */
+.square.lvl-9  { background-color: #0ea5e9; } /* 1h 45m */
+.square.lvl-10 { background-color: #38bdf8; } /* 2h */
+
+/* 2h - 6h (Blue & Indigo spectrum) */
+.square.lvl-11 { background-color: #60a5fa; } /* 2.5h */
+.square.lvl-12 { background-color: #3b82f6; } /* 3h */
+.square.lvl-13 { background-color: #2563eb; } /* 3.5h */
+.square.lvl-14 { background-color: #1d4ed8; } /* 4h */
+.square.lvl-15 { background-color: #818cf8; } /* 4.5h */
+.square.lvl-16 { background-color: #6366f1; } /* 5h */
+.square.lvl-17 { background-color: #4f46e5; } /* 5.5h */
+.square.lvl-18 { background-color: #4338ca; } /* 6h */
+
+/* > 6h (Purple -> Magenta -> Rose -> Gold spectrum) */
+.square.lvl-19 { background-color: #a855f7; } /* 7h */
+.square.lvl-20 { background-color: #9333ea; } /* 8h */
+.square.lvl-21 { background-color: #d946ef; } /* 9h */
+.square.lvl-22 { background-color: #c026d3; } /* 10h */
+.square.lvl-23 { background-color: #f43f5e; } /* 11h */
+.square.lvl-24 { background-color: #e11d48; } /* 12h */
+.square.lvl-25 { background-color: #fbbf24; } /* 12h+ */
 
 .heatmap-legend {
   display: flex;

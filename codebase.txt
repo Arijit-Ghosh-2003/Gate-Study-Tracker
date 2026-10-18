@@ -1,0 +1,1958 @@
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const { exec } = require('child_process');
+const db = require('./db');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// -------------------------------------------------------------
+// NATIVE OS SOUND & DESKTOP NOTIFICATION TRIGGER (WINDOWS)
+// -------------------------------------------------------------
+function triggerSystemAlert(type, topicName, extraText) {
+  let title = '🎯 Mission GATE 2027 Alert';
+  let message = '';
+  let psBeepCommand = '';
+
+  if (type === 'half') {
+    title = '⏱️ Half-Time Reached (50%)';
+    message = `You are halfway through your target time for: ${topicName}`;
+    psBeepCommand = '[console]::beep(700, 300); [console]::beep(700, 300)';
+  } else if (type === 'quarter') {
+    title = '⏳ Quarter Time Remaining (25% Left)';
+    message = `Only 25% target time remaining for: ${topicName}`;
+    psBeepCommand = '[console]::beep(1100, 200); Start-Sleep -m 100; [console]::beep(1100, 200)';
+  } else if (type === 'end') {
+    title = '🚨 Target Timer Finished!';
+    message = `Target time completed for: ${topicName}. ${extraText || ''}`;
+    psBeepCommand = '[console]::beep(800, 250); [console]::beep(1000, 250); [console]::beep(1300, 500)';
+  }
+
+  if (process.platform === 'win32') {
+    // -WindowStyle Hidden prevents the CMD/PowerShell window flash
+    const toastMessage = message.replace(/'/g, "''");
+    const cmd = `powershell -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "${psBeepCommand}; [reflection.assembly]::loadwithpartialname('System.Windows.Forms'); $notify = new-object system.windows.forms.notifyicon; $notify.icon = [system.drawing.systemicons]::Information; $notify.visible = $true; $notify.showballoontip(5000, '${title}', '${toastMessage}', [system.windows.forms.tooltipicon]::Info)"`;
+    exec(cmd);
+  }
+}
+
+// -------------------------------------------------------------
+// BACKGROUND WORKER: TIMER MILESTONES & STALE CLEANUP
+// -------------------------------------------------------------
+async function processActiveSessions() {
+  try {
+    // 1. Cleanup stale sessions if tab/app was abruptly closed without heartbeat (> 35s)
+    const [staleSessions] = await db.query(
+      `SELECT id, start_time, last_heartbeat FROM study_sessions WHERE status = 'active' AND last_heartbeat < NOW() - INTERVAL 35 SECOND`
+    );
+
+    for (const session of staleSessions) {
+      const activeDelta = Math.max(0, Math.floor((new Date(session.last_heartbeat) - new Date(session.start_time)) / 1000));
+      
+      // Update session status to long_interruption instead of terminated
+      await db.query(
+        `UPDATE study_sessions SET status = 'long_interruption', end_time = last_heartbeat, total_active_seconds = ? WHERE id = ?`,
+        [activeDelta, session.id]
+      );
+      
+      // Log long-term pause interval
+      await db.query(
+        `INSERT INTO pause_intervals (session_id, pause_start, pause_end, pause_type) VALUES (?, NOW(), NOW(), 'long_term')`,
+        [session.id]
+      );
+    }
+
+    // 2. Check milestone notifications for running sessions
+    const [activeSessions] = await db.query(
+      `SELECT * FROM study_sessions WHERE status = 'active'`
+    );
+
+    for (const s of activeSessions) {
+      const lastHb = new Date(s.last_heartbeat);
+      const now = new Date();
+      const liveSeconds = (s.total_active_seconds || 0) + Math.max(0, Math.floor((now - lastHb) / 1000));
+      const totalTargetSecs = (s.target_duration_seconds || 0) + (s.extended_duration_seconds || 0);
+
+      if (totalTargetSecs <= 0) continue;
+
+      const progress = liveSeconds / totalTargetSecs;
+
+      if (progress >= 0.5 && progress < 0.75 && !s.notified_50) {
+        await db.query(`UPDATE study_sessions SET notified_50 = 1 WHERE id = ?`, [s.id]);
+      }
+
+      if (progress >= 0.75 && progress < 1.0 && !s.notified_75) {
+        await db.query(`UPDATE study_sessions SET notified_75 = 1 WHERE id = ?`, [s.id]);
+      }
+
+      if (progress >= 1.0 && !s.notified_100) {
+        await db.query(`UPDATE study_sessions SET notified_100 = 1 WHERE id = ?`, [s.id]);
+      }
+    }
+  } catch (err) {
+    console.error('Background worker error:', err.message);
+  }
+}
+// Run checks every 2 seconds
+setInterval(processActiveSessions, 2000);
+
+// --- API ENDPOINTS ---
+
+
+app.get('/api/session/current', async (req, res) => {
+  try {
+const [rows] = await db.query(
+  `SELECT * FROM study_sessions WHERE status IN ('active', 'paused', 'long_interruption') ORDER BY id DESC LIMIT 1`
+);
+    if (rows.length === 0) return res.json({ session: null });
+
+    const session = rows[0];
+    const [pauses] = await db.query(`SELECT * FROM pause_intervals WHERE session_id = ? ORDER BY pause_start ASC`, [session.id]);
+    res.json({ session, pauses });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/session/last-inputs', async (req, res) => {
+  try {
+    const [rows] = await db.query(`SELECT session_mode, subject, topic, platform, target_goal, study_type, target_duration_seconds FROM study_sessions ORDER BY id DESC LIMIT 1`);
+    if (rows.length === 0) return res.json({ lastInput: null });
+    res.json({ lastInput: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/session/start', async (req, res) => {
+  const { session_mode, subject, topic, platform, target_goal, study_type, target_minutes } = req.body;
+  if (!subject || !topic) return res.status(400).json({ error: 'Subject and Topic required' });
+
+  const targetSecs = (parseInt(target_minutes) || 0) * 60;
+
+  try {
+    await db.query(`UPDATE study_sessions SET status = 'completed', end_time = NOW() WHERE status IN ('active', 'paused')`);
+
+    const [result] = await db.query(
+      `INSERT INTO study_sessions 
+       (session_mode, subject, topic, platform, target_goal, study_type, target_duration_seconds, start_time, last_heartbeat, status, notified_50, notified_75, notified_100) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 'active', 0, 0, 0)`,
+      [session_mode || 'study', subject.trim(), topic.trim(), platform.trim(), target_goal.trim(), study_type.trim(), targetSecs]
+    );
+
+    const [newSession] = await db.query(`SELECT * FROM study_sessions WHERE id = ?`, [result.insertId]);
+    res.json({ session: newSession[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/session/heartbeat', async (req, res) => {
+  const { sessionId, activeSeconds } = req.body;
+  try {
+    await db.query(
+      `UPDATE study_sessions SET last_heartbeat = NOW(), total_active_seconds = ? WHERE id = ? AND status = 'active'`,
+      [activeSeconds, sessionId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/session/extend-target', async (req, res) => {
+  const { sessionId, additionalMinutes } = req.body;
+  const additionalSecs = (parseInt(additionalMinutes) || 15) * 60;
+  try {
+    // Reset 100% notification flag so future extensions can trigger alerts again when extended target ends
+    await db.query(
+      `UPDATE study_sessions SET extended_duration_seconds = extended_duration_seconds + ?, notified_100 = 0 WHERE id = ?`,
+      [additionalSecs, sessionId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/session/pause', async (req, res) => {
+  const { sessionId, activeSeconds } = req.body;
+  try {
+    await db.query(`UPDATE study_sessions SET status = 'paused', total_active_seconds = ? WHERE id = ?`, [activeSeconds, sessionId]);
+    await db.query(`INSERT INTO pause_intervals (session_id, pause_start) VALUES (?, NOW())`, [sessionId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/session/resume', async (req, res) => {
+  const { sessionId } = req.body;
+  try {
+    await db.query(`UPDATE study_sessions SET status = 'active', last_heartbeat = NOW() WHERE id = ?`, [sessionId]);
+    await db.query(`UPDATE pause_intervals SET pause_end = NOW() WHERE session_id = ? AND pause_end IS NULL`, [sessionId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/session/end', async (req, res) => {
+  const { sessionId, activeSeconds } = req.body;
+  try {
+    await db.query(`UPDATE pause_intervals SET pause_end = NOW() WHERE session_id = ? AND pause_end IS NULL`, [sessionId]);
+    await db.query(`UPDATE study_sessions SET status = 'completed', end_time = NOW(), total_active_seconds = ? WHERE id = ?`, [activeSeconds, sessionId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/analytics/summary', async (req, res) => {
+  try {
+    const [dailyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE DATE(start_time) = CURDATE()`);
+// 🟢 NEW: Counts all breaks that are NOT long_term (matches history logic)
+const [dailyInterruptionCount] = await db.query(
+  `SELECT COUNT(*) as total FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND (pause_type IS NULL OR pause_type != 'long_term')`
+);
+const [dailyInterruptionTime] = await db.query(`
+  SELECT SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))) as total 
+  FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND (pause_type IS NULL OR pause_type != 'long_term')
+`);
+    const [weeklyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`);
+    const [monthlyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`);
+
+    res.json({
+      daily_seconds: dailyStudy[0].total || 0,
+      daily_interruption_count: dailyInterruptionCount[0].total || 0,
+      daily_interruption_seconds: dailyInterruptionTime[0].total || 0,
+      weekly_seconds: weeklyStudy[0].total || 0,
+      monthly_seconds: monthlyStudy[0].total || 0
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/analytics/heatmap', async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT DATE(start_time) as date, SUM(total_active_seconds) as total_seconds
+      FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+      GROUP BY DATE(start_time) ORDER BY date ASC
+    `);
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/history', async (req, res) => {
+  try {
+    const [sessions] = await db.query(`SELECT s.* FROM study_sessions s ORDER BY s.start_time DESC LIMIT 100`);
+    for (const session of sessions) {
+      const [pauses] = await db.query(`SELECT pause_start, pause_end FROM pause_intervals WHERE session_id = ? ORDER BY pause_start ASC`, [session.id]);
+      session.pauses = pauses;
+    }
+    res.json({ history: sessions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/session/long-interrupt', async (req, res) => {
+  const { sessionId, activeSeconds, statusReason } = req.body;
+  const newStatus = statusReason === 'target_not_achieved' ? 'target_not_achieved' : 'long_interruption';
+  try {
+    await db.query(`UPDATE pause_intervals SET pause_end = NOW() WHERE session_id = ? AND pause_end IS NULL`, [sessionId]);
+    await db.query(`UPDATE study_sessions SET status = ?, total_active_seconds = ?, end_time = NOW() WHERE id = ?`, [newStatus, activeSeconds, sessionId]);
+    await db.query(`INSERT INTO pause_intervals (session_id, pause_start, pause_end, pause_type) VALUES (?, NOW(), NOW(), 'long_term')`, [sessionId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Mission GATE 2027 Tracker running at http://localhost:${PORT}`);
+});
+
+// ADD THIS DEBUG ENDPOINT TO server.js
+app.get('/api/debug-db', async (req, res) => {
+  try {
+    const [dbInfo] = await db.query('SELECT DATABASE() as current_db, USER() as connected_user');
+    const [tables] = await db.query('SHOW TABLES');
+    res.json({
+      status: 'Connected successfully!',
+      connection: dbInfo[0],
+      tables: tables
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'Connection failed',
+      error: err.message,
+      code: err.code,
+      env_check: {
+        host: process.env.DB_HOST ? 'Set' : 'Missing',
+        port: process.env.DB_PORT || 'Defaulting to 3306',
+        user: process.env.DB_USER || 'Missing',
+        db_name: process.env.DB_NAME || 'Missing'
+      }
+    });
+  }
+});
+const mysql = require('mysql2/promise');
+require('dotenv').config();
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT, 10) || 3306,
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'study_tracker',
+  timezone: '+05:30', // Forces MySQL connection to use IST offset
+  ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' ? { rejectUnauthorized: false } : false,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+
+module.exports = pool;
+-- Mission GATE 2027 Study Tracker Schema v3
+CREATE DATABASE IF NOT EXISTS study_tracker;
+USE study_tracker;
+
+-- Table to store study & practice exam sessions
+CREATE TABLE IF NOT EXISTS study_sessions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    session_mode ENUM('study', 'practice_exam') DEFAULT 'study',
+    subject VARCHAR(255) NOT NULL,
+    topic VARCHAR(255) NOT NULL,
+    platform VARCHAR(255) NOT NULL,
+    target_goal TEXT,
+    study_type VARCHAR(100) NOT NULL, -- 'Fresh Study', 'Revision', 'Full Length Test', etc.
+    start_time DATETIME NOT NULL,
+    end_time DATETIME DEFAULT NULL,
+    total_active_seconds INT DEFAULT 0,
+    target_duration_seconds INT DEFAULT 0,
+    extended_duration_seconds INT DEFAULT 0,
+    status ENUM('active', 'paused', 'completed', 'terminated') DEFAULT 'active',
+    last_heartbeat DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Table to track pause intervals / interruptions
+CREATE TABLE IF NOT EXISTS pause_intervals (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    session_id INT NOT NULL,
+    pause_start DATETIME NOT NULL,
+    pause_end DATETIME DEFAULT NULL,
+    FOREIGN KEY (session_id) REFERENCES study_sessions(id) ON DELETE CASCADE
+);
+
+ALTER TABLE study_sessions
+ADD COLUMN notified_50 TINYINT DEFAULT 0,
+ADD COLUMN notified_75 TINYINT DEFAULT 0,
+ADD COLUMN notified_100 TINYINT DEFAULT 0;
+
+-- 1. Expand session status ENUM
+ALTER TABLE study_sessions 
+MODIFY COLUMN status ENUM('active', 'paused', 'long_interruption', 'target_not_achieved', 'completed', 'terminated') DEFAULT 'active';
+
+-- 2. Add pause type classification
+ALTER TABLE pause_intervals 
+ADD COLUMN pause_type ENUM('short', 'long_term') DEFAULT 'short';
+
+Select * from study_sessions;
+Select * from pause_intervals;
+
+update study_sessions
+set status='long_interruption'
+where id=15;
+
+-- Delete from study_sessions
+-- where id=14;
+
+-- SELECT 
+--     table_name AS `Table`,
+--     table_rows AS `Approximate Rows`,
+--     ROUND(data_length / 1024 / 1024, 2) AS `Data Size (MB)`,
+--     ROUND(index_length / 1024 / 1024, 2) AS `Index Size (MB)`,
+--     ROUND((data_length + index_length) / 1024 / 1024, 2) AS `Total Storage (MB)`,
+--     ROUND((data_length + index_length) / IFNULL(NULLIF(table_rows, 0), 1), 0) AS `Avg Bytes / Row`
+-- FROM information_schema.tables
+-- WHERE table_schema = 'study_tracker';
+
+UPDATE study_sessions 
+SET 
+  total_active_seconds = 2220,
+  end_time = DATE_ADD(start_time, INTERVAL 37 MINUTE),
+  status = 'completed'
+WHERE id = 16;
+
+UPDATE pause_intervals 
+SET pause_end = NOW() 
+WHERE id = 336;
+
+UPDATE study_sessions s
+SET total_active_seconds = (
+  TIMESTAMPDIFF(SECOND, s.start_time, IFNULL(s.end_time, NOW())) - (
+    SELECT IFNULL(SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))), 0)
+    FROM pause_intervals
+    WHERE session_id = s.id
+  )
+)
+WHERE s.id = 16;
+
+-- View session total duration vs break duration
+SELECT 
+  s.id AS session_id,
+  s.start_time,
+  s.end_time,
+  TIMESTAMPDIFF(SECOND, s.start_time, s.end_time) AS total_session_sec,
+  p.id AS pause_id,
+  p.pause_start,
+  p.pause_end,
+  TIMESTAMPDIFF(SECOND, p.pause_start, p.pause_end) AS break_sec
+FROM study_sessions s
+JOIN pause_intervals p ON s.id = p.session_id
+WHERE s.id = 16;
+
+UPDATE study_sessions s
+SET total_active_seconds = GREATEST(0, (
+  TIMESTAMPDIFF(SECOND, s.start_time, IFNULL(s.end_time, NOW())) - (
+    SELECT IFNULL(SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))), 0)
+    FROM pause_intervals
+    WHERE session_id = s.id
+  )
+))
+WHERE s.id = 16;
+// =============================================================
+// PASTE THIS AT THE VERY TOP (LINE 1) OF public/app.js
+// =============================================================
+const SoundEngine = {
+  ctx: null,
+  init() {
+    if (!this.ctx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) this.ctx = new AudioCtx();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  playClick() {
+    this.init();
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(1000, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.04);
+    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.04);
+    osc.connect(gain); gain.connect(this.ctx.destination);
+    osc.start(); osc.stop(this.ctx.currentTime + 0.04);
+  },
+  playHalftime() {
+    this.init(); if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    [523.25, 659.25].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.2, now + idx * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.15 + 0.3);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(now + idx * 0.15); osc.stop(now + idx * 0.15 + 0.3);
+    });
+  },
+  playQuarter() {
+    this.init(); if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    [0, 0.15].forEach(delay => {
+      const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+      osc.type = 'triangle'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.25, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.1);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(now + delay); osc.stop(now + delay + 0.1);
+    });
+  },
+  playFinish() {
+    this.init(); if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.2, now + idx * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.5);
+      osc.connect(gain); gain.connect(this.ctx.destination);
+      osc.start(now + idx * 0.12); osc.stop(now + idx * 0.12 + 0.5);
+    });
+  }
+};
+
+function triggerHapticFeedback(ms = 15) {
+  if ('vibrate' in navigator) navigator.vibrate(ms);
+}
+
+// =============================================================
+// YOUR EXISTING CODE CONTINUES HERE BELOW
+// =============================================================
+
+let currentSession = null;
+let timerInterval = null;
+let heartbeatInterval = null;
+let activeSeconds = 0;
+let targetRemainingSeconds = 0;
+let notificationFired = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+
+  // Request browser notification permissions
+  if ('Notification' in window && Notification.permission !== 'granted') {
+    Notification.requestPermission();
+  }
+
+  // Radio button listener for mode switching
+  document.querySelectorAll('input[name="session_mode"]').forEach(radio => {
+    radio.addEventListener('change', updateFormLabels);
+  });
+
+  document.getElementById('start-form').addEventListener('submit', startSession);
+  document.getElementById('pause-btn').addEventListener('click', pauseSession);
+  document.getElementById('resume-btn').addEventListener('click', resumeSession);
+  document.getElementById('end-btn').addEventListener('click', endSession);
+  document.getElementById('extend-custom-btn').addEventListener('click', promptExtendTarget);
+
+  // Quick extend buttons on alert
+  document.querySelectorAll('.extend-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const mins = parseInt(e.target.dataset.mins);
+      extendTargetTime(mins);
+    });
+  });
+  
+    // Universal click audio + haptics listener
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('button') || e.target.closest('.btn') || e.target.closest('input[type="radio"]')) {
+      SoundEngine.playClick();
+      triggerHapticFeedback(15);
+    }
+  });
+
+  // New button listeners
+  document.getElementById('long-break-btn').addEventListener('click', () => triggerLongInterrupt('long_interruption'));
+  document.getElementById('target-unachieved-btn').addEventListener('click', () => triggerLongInterrupt('target_not_achieved'));
+  document.getElementById('modal-resume-btn').addEventListener('click', handleModalResume);
+  document.getElementById('modal-new-btn').addEventListener('click', handleModalNewSession);
+});
+
+async function init() {
+  updateFormLabels();
+  await loadLastInputs();
+  await loadCurrentSession();
+  await loadSummaryAnalytics();
+  await loadHeatmap();
+  await loadHistory();
+}
+
+// 1. Dynamic Form Labeling based on Study vs Practice Exam Mode
+function updateFormLabels() {
+  const mode = document.querySelector('input[name="session_mode"]:checked').value;
+  const lblSubject = document.getElementById('lbl-subject');
+  const lblTopic = document.getElementById('lbl-topic');
+  const lblPlatform = document.getElementById('lbl-platform');
+  const lblTarget = document.getElementById('lbl-target');
+  const lblType = document.getElementById('lbl-type');
+  const inpType = document.getElementById('inp-type');
+
+  if (mode === 'study') {
+    lblSubject.innerText = 'Subject Name';
+    lblTopic.innerText = 'Chapter / Topic Name';
+    lblPlatform.innerText = 'Study Platform / Source';
+    lblTarget.innerText = 'Session Target / Goal';
+    lblType.innerText = 'Study Type';
+
+    inpType.innerHTML = `
+      <option value="Fresh Study">Fresh Study / New Learning</option>
+      <option value="Revision">Revision</option>
+    `;
+  } else {
+    lblSubject.innerText = 'Exam / Subject Name';
+    lblTopic.innerText = 'Mock Test / Topic Test Name';
+    lblPlatform.innerText = 'Test Series / Platform Name';
+    lblTarget.innerText = 'Target Score / Goals';
+    lblType.innerText = 'Practice Exam Category';
+
+    inpType.innerHTML = `
+      <option value="Full Length Test">Full Length Mock Test</option>
+      <option value="Subject Test">Subject Test</option>
+      <option value="Topic Test">Topic Test</option>
+    `;
+  }
+}
+
+// 2. Pre-fill Form with Last Session Data
+async function loadLastInputs() {
+  try {
+    const res = await fetch('/api/session/last-inputs');
+    const { lastInput } = await res.json();
+
+    if (lastInput) {
+      const modeRadio = document.querySelector(`input[name="session_mode"][value="${lastInput.session_mode}"]`);
+      if (modeRadio) {
+        modeRadio.checked = true;
+        updateFormLabels();
+      }
+
+      document.getElementById('inp-subject').value = lastInput.subject || '';
+      document.getElementById('inp-topic').value = lastInput.topic || '';
+      document.getElementById('inp-platform').value = lastInput.platform || '';
+      document.getElementById('inp-target').value = lastInput.target_goal || '';
+      document.getElementById('inp-type').value = lastInput.study_type || '';
+      
+      if (lastInput.target_duration_seconds) {
+        const totalMins = Math.floor(lastInput.target_duration_seconds / 60);
+        document.getElementById('inp-target-hrs').value = Math.floor(totalMins / 60);
+        document.getElementById('inp-target-mins').value = totalMins % 60;
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching last inputs:', err);
+  }
+}
+
+// 3. Load Active or Interrupted Session
+// REPLACE your existing loadCurrentSession() with this:
+async function loadCurrentSession() {
+  const res = await fetch('/api/session/current');
+  const data = await res.json();
+
+  if (data.session) {
+    currentSession = data.session;
+    activeSeconds = currentSession.total_active_seconds || 0;
+
+    if (currentSession.status === 'active') {
+      const lastHeartbeat = new Date(currentSession.last_heartbeat);
+      const now = new Date();
+      const elapsedSinceHeartbeat = Math.max(0, Math.floor((now - lastHeartbeat) / 1000));
+      activeSeconds += elapsedSinceHeartbeat;
+      renderActiveSessionUI();
+      startTimer();
+    } else if (currentSession.status === 'paused' || currentSession.status === 'long_interruption') {
+      // Show continuation popup when reopening an interrupted session
+      showContinuationModal(currentSession);
+    }
+  } else {
+    showSetupUI();
+  }
+}
+// PASTE THESE 4 FUNCTIONS DIRECTLY BELOW loadCurrentSession():
+
+function showContinuationModal(session) {
+  const modal = document.getElementById('continuation-modal');
+  const infoText = document.getElementById('modal-session-info');
+  infoText.innerHTML = `Previous session for <strong>${escapeHtml(session.topic)}</strong> (${escapeHtml(session.subject)}) was interrupted. Total active study time saved: <strong>${Math.floor(session.total_active_seconds / 60)} mins</strong>.`;
+  modal.classList.remove('hidden');
+}
+
+async function handleModalResume() {
+  document.getElementById('continuation-modal').classList.add('hidden');
+  renderActiveSessionUI();
+  await resumeSession();
+}
+
+async function handleModalNewSession() {
+  document.getElementById('continuation-modal').classList.add('hidden');
+  if (currentSession) {
+    await fetch('/api/session/end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: currentSession.id, activeSeconds, statusReason: 'target_not_achieved' })
+    });
+  }
+  currentSession = null;
+  activeSeconds = 0;
+  showSetupUI();
+  await loadSummaryAnalytics();
+  await loadHeatmap();
+  await loadHistory();
+}
+
+async function triggerLongInterrupt(reason) {
+  stopTimer();
+  if (!currentSession) return;
+
+  await fetch('/api/session/long-interrupt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: currentSession.id, activeSeconds, statusReason: reason })
+  });
+
+  currentSession = null;
+  activeSeconds = 0;
+  showSetupUI();
+
+  await loadSummaryAnalytics();
+  await loadHeatmap();
+  await loadHistory();
+}
+
+function renderActiveSessionUI() {
+  document.getElementById('session-setup').classList.add('hidden');
+  document.getElementById('active-session').classList.remove('hidden');
+
+  document.getElementById('current-topic-display').innerText = currentSession.topic;
+  document.getElementById('current-meta-display').innerText = 
+    `${currentSession.subject} • ${currentSession.platform} • Target: ${currentSession.target_goal || 'N/A'} (${currentSession.study_type})`;
+
+  const badge = document.getElementById('status-badge');
+  badge.innerText = currentSession.status === 'active' ? 'STUDYING' : 'INTERRUPTED';
+  badge.style.background = currentSession.status === 'active' ? '#22c55e' : '#f59e0b';
+
+  const modeBadge = document.getElementById('mode-display-badge');
+  modeBadge.innerText = currentSession.session_mode.toUpperCase().replace('_', ' ');
+}
+
+function showSetupUI() {
+  document.getElementById('session-setup').classList.remove('hidden');
+  document.getElementById('active-session').classList.add('hidden');
+  document.getElementById('target-reached-alert').classList.add('hidden');
+  stopTimer();
+}
+
+function startTimer() {
+  stopTimer();
+  notificationFired = false;
+
+  timerInterval = setInterval(() => {
+    activeSeconds++;
+    updateTimerDisplay();
+  }, 1000);
+
+  heartbeatInterval = setInterval(sendHeartbeat, 10000);
+}
+
+function stopTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+}
+
+// 🟢 REPLACE WITH THIS UPDATED VERSION IN public/app.js:
+function updateTimerDisplay() {
+  // 1. Elapsed Active Time Display
+  const hrs = String(Math.floor(activeSeconds / 3600)).padStart(2, '0');
+  const mins = String(Math.floor((activeSeconds % 3600) / 60)).padStart(2, '0');
+  const secs = String(activeSeconds % 60).padStart(2, '0');
+  document.getElementById('timer-display').innerText = `${hrs}:${mins}:${secs}`;
+
+  // 2. Target Countdown & Audio Milestone Checks
+  if (currentSession) {
+    const totalTargetSecs = (currentSession.target_duration_seconds || 0) + (currentSession.extended_duration_seconds || 0);
+    targetRemainingSeconds = totalTargetSecs - activeSeconds;
+
+    if (totalTargetSecs > 0) {
+      const progress = activeSeconds / totalTargetSecs;
+
+      // 50% Halftime Audio Milestone (Upward Chime)
+      if (progress >= 0.5 && progress < 0.75 && !milestone50Fired) {
+        milestone50Fired = true;
+        SoundEngine.playHalftime();
+      }
+
+      // 75% Quarter Time Remaining Audio Milestone (Double Pulse)
+      if (progress >= 0.75 && progress < 1.0 && !milestone75Fired) {
+        milestone75Fired = true;
+        SoundEngine.playQuarter();
+      }
+
+      // 100% Target Completed Audio Milestone (Fanfare Chord + Haptics)
+      if (targetRemainingSeconds <= 0) {
+        document.getElementById('target-countdown-display').innerText = '00:00:00';
+        document.getElementById('target-status-subtext').innerText = '🎯 Target Time Reached!';
+        document.getElementById('target-reached-alert').classList.remove('hidden');
+
+        if (!milestone100Fired) {
+          milestone100Fired = true;
+          SoundEngine.playFinish();
+          triggerHapticFeedback([100, 50, 100]);
+        }
+      } else {
+        document.getElementById('target-reached-alert').classList.add('hidden');
+        const tHrs = String(Math.floor(targetRemainingSeconds / 3600)).padStart(2, '0');
+        const tMins = String(Math.floor((targetRemainingSeconds % 3600) / 60)).padStart(2, '0');
+        const tSecs = String(targetRemainingSeconds % 60).padStart(2, '0');
+        document.getElementById('target-countdown-display').innerText = `${tHrs}:${tMins}:${tSecs}`;
+        document.getElementById('target-status-subtext').innerText = 'Runs only during active session';
+      }
+    }
+  }
+}
+
+function triggerNotification() {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('🎯 Mission GATE 2027 Alert', {
+      body: `Your target time for "${currentSession.topic}" has completed!`,
+      icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
+    });
+  }
+}
+
+async function sendHeartbeat() {
+  if (!currentSession || currentSession.status !== 'active') return;
+  await fetch('/api/session/heartbeat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: currentSession.id, activeSeconds })
+  });
+}
+
+// 4. Start Session
+async function startSession(e) {
+  e.preventDefault();
+
+  const session_mode = document.querySelector('input[name="session_mode"]:checked').value;
+  const subject = document.getElementById('inp-subject').value;
+  const topic = document.getElementById('inp-topic').value;
+  const platform = document.getElementById('inp-platform').value;
+  const target_goal = document.getElementById('inp-target').value;
+  const study_type = document.getElementById('inp-type').value;
+  const hrs = parseInt(document.getElementById('inp-target-hrs').value) || 0;
+  const mins = parseInt(document.getElementById('inp-target-mins').value) || 0;
+  const target_minutes = (hrs * 60) + mins;
+
+  const res = await fetch('/api/session/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_mode, subject, topic, platform, target_goal, study_type, target_minutes })
+  });
+
+  const data = await res.json();
+  currentSession = data.session;
+  activeSeconds = 0;
+
+  document.getElementById('pause-btn').classList.remove('hidden');
+  document.getElementById('resume-btn').classList.add('hidden');
+
+  renderActiveSessionUI();
+  startTimer();
+}
+
+async function extendTargetTime(additionalMins) {
+  if (!currentSession) return;
+  await fetch('/api/session/extend-target', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: currentSession.id, additionalMinutes: additionalMins })
+  });
+
+  currentSession.extended_duration_seconds = (currentSession.extended_duration_seconds || 0) + (additionalMins * 60);
+  notificationFired = false;
+  document.getElementById('target-reached-alert').classList.add('hidden');
+  updateTimerDisplay();
+}
+
+function promptExtendTarget() {
+  const mins = prompt('Enter additional target minutes to extend:', '30');
+  if (mins && !isNaN(mins)) {
+    extendTargetTime(parseInt(mins));
+  }
+}
+
+async function pauseSession() {
+  stopTimer();
+  currentSession.status = 'paused';
+
+  await fetch('/api/session/pause', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: currentSession.id, activeSeconds })
+  });
+
+  showPauseState();
+  await loadSummaryAnalytics();
+}
+
+function showPauseState() {
+  const badge = document.getElementById('status-badge');
+  badge.innerText = 'INTERRUPTED';
+  badge.style.background = '#f59e0b';
+  document.getElementById('pause-btn').classList.add('hidden');
+  document.getElementById('resume-btn').classList.remove('hidden');
+}
+
+async function resumeSession() {
+  currentSession.status = 'active';
+
+  await fetch('/api/session/resume', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: currentSession.id })
+  });
+
+  const badge = document.getElementById('status-badge');
+  badge.innerText = 'STUDYING';
+  badge.style.background = '#22c55e';
+  document.getElementById('pause-btn').classList.remove('hidden');
+  document.getElementById('resume-btn').classList.add('hidden');
+
+  startTimer();
+}
+
+async function endSession() {
+  stopTimer();
+
+  await fetch('/api/session/end', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: currentSession.id, activeSeconds })
+  });
+
+  currentSession = null;
+  activeSeconds = 0;
+  showSetupUI();
+  
+  await loadSummaryAnalytics();
+  await loadHeatmap();
+  await loadHistory();
+}
+
+// 5. Load Summary Analytics Header Values
+async function loadSummaryAnalytics() {
+  const res = await fetch('/api/analytics/summary');
+  const data = await res.json();
+
+  document.getElementById('top-daily-time').innerText = formatHoursMins(data.daily_seconds);
+  document.getElementById('top-daily-break-count').innerText = `${data.daily_interruption_count} breaks`;
+  document.getElementById('top-daily-break-time').innerText = formatHoursMins(data.daily_interruption_seconds);
+
+  document.getElementById('stat-weekly-time').innerText = formatHoursMins(data.weekly_seconds);
+  document.getElementById('stat-monthly-time').innerText = formatHoursMins(data.monthly_seconds);
+}
+
+function formatHoursMins(totalSeconds) {
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  return `${hrs}h ${mins}m`;
+}
+
+// 6. Heatmap
+// REPLACE getHeatmapLevel(minutes) in public/app.js WITH THIS:
+function getHeatmapLevel(minutes) {
+  if (minutes <= 0) return 'lvl-0';       // 0 min
+
+  // 0 - 1 Hour (Every 10 mins)
+  if (minutes <= 10) return 'lvl-1';     // 1–10m
+  if (minutes <= 20) return 'lvl-2';     // 11–20m
+  if (minutes <= 30) return 'lvl-3';     // 21–30m
+  if (minutes <= 40) return 'lvl-4';     // 31–40m
+  if (minutes <= 50) return 'lvl-5';     // 41–50m
+  if (minutes <= 60) return 'lvl-6';     // 51–60m (1h)
+
+  // 1 - 2 Hours (Every 15 mins)
+  if (minutes <= 75) return 'lvl-7';     // 1h 15m
+  if (minutes <= 90) return 'lvl-8';     // 1h 30m
+  if (minutes <= 105) return 'lvl-9';    // 1h 45m
+  if (minutes <= 120) return 'lvl-10';   // 2h
+
+  // 2 - 6 Hours (Every 30 mins)
+  if (minutes <= 150) return 'lvl-11';   // 2.5h
+  if (minutes <= 180) return 'lvl-12';   // 3h
+  if (minutes <= 210) return 'lvl-13';   // 3.5h
+  if (minutes <= 240) return 'lvl-14';   // 4h
+  if (minutes <= 270) return 'lvl-15';   // 4.5h
+  if (minutes <= 300) return 'lvl-16';   // 5h
+  if (minutes <= 330) return 'lvl-17';   // 5.5h
+  if (minutes <= 360) return 'lvl-18';   // 6h
+
+  // > 6 Hours (Every 1 hour)
+  if (minutes <= 420) return 'lvl-19';   // 7h
+  if (minutes <= 480) return 'lvl-20';   // 8h
+  if (minutes <= 540) return 'lvl-21';   // 9h
+  if (minutes <= 600) return 'lvl-22';   // 10h
+  if (minutes <= 660) return 'lvl-23';   // 11h
+  if (minutes <= 720) return 'lvl-24';   // 12h
+  return 'lvl-25';                       // > 12h
+}
+
+async function loadHeatmap() {
+  const res = await fetch('/api/analytics/heatmap');
+  const { data } = await res.json();
+
+  const activityMap = {};
+  data.forEach(item => {
+    const dateStr = new Date(item.date).toISOString().split('T')[0];
+    activityMap[dateStr] = item.total_seconds;
+  });
+
+  const container = document.getElementById('heatmap-container');
+  const tooltip = document.getElementById('heatmap-tooltip');
+  container.innerHTML = '';
+
+  // Show 3 months ending with current month
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonthIdx = today.getMonth();
+
+  for (let offset = 2; offset >= 0; offset--) {
+    const monthDate = new Date(currentYear, currentMonthIdx - offset, 1);
+    const mYear = monthDate.getFullYear();
+    const mIdx = monthDate.getMonth();
+    const monthName = monthDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+
+    // Month Card Block
+    const monthBlock = document.createElement('div');
+    monthBlock.className = 'month-block';
+
+    const monthTitle = document.createElement('div');
+    monthTitle.className = 'month-title';
+    monthTitle.innerText = monthName;
+    monthBlock.appendChild(monthTitle);
+
+    const daysGrid = document.createElement('div');
+    daysGrid.className = 'days-grid';
+
+    const daysInMonth = new Date(mYear, mIdx + 1, 0).getDate();
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const yyyy = mYear;
+      const mm = String(mIdx + 1).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+
+      const totalSecs = activityMap[dateStr] || 0;
+      const mins = Math.floor(totalSecs / 60);
+      const level = getHeatmapLevel(mins);
+
+      const square = document.createElement('div');
+      square.className = `square ${level}`;
+
+      // LeetCode-style Floating Tooltip Events
+      square.addEventListener('mouseenter', (e) => {
+        const d = new Date(dateStr + 'T00:00:00');
+        const dateFormatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        
+        let timeStr = 'No study logged';
+        if (totalSecs > 0) {
+          const hrs = Math.floor(totalSecs / 3600);
+          const m = Math.floor((totalSecs % 3600) / 60);
+          const hrsText = hrs > 0 ? `${hrs}h ` : '';
+          timeStr = `<strong>${hrsText}${m}m</strong> study time`;
+        }
+
+        tooltip.innerHTML = `${timeStr} on <strong>${dateFormatted}</strong>`;
+        tooltip.classList.remove('hidden');
+      });
+
+      square.addEventListener('mousemove', (e) => {
+        tooltip.style.left = `${e.pageX}px`;
+        tooltip.style.top = `${e.pageY}px`;
+      });
+
+      square.addEventListener('mouseleave', () => {
+        tooltip.classList.add('hidden');
+      });
+
+      daysGrid.appendChild(square);
+    }
+
+    monthBlock.appendChild(daysGrid);
+    container.appendChild(monthBlock);
+  }
+}
+// 7. Load History Table with Time Variance
+// REPLACE loadHistory() in public/app.js WITH THIS:
+async function loadHistory() {
+  const res = await fetch('/api/history');
+  const { history } = await res.json();
+
+  const tbody = document.getElementById('history-tbody');
+  tbody.innerHTML = '';
+
+  if (history.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No session history recorded yet.</td></tr>';
+    return;
+  }
+
+  history.forEach(item => {
+    const row = document.createElement('tr');
+    
+    // Format Start Date & Time
+    const startDateObj = new Date(item.start_time);
+    const formattedDate = startDateObj.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    const formattedTime = startDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const activeMins = Math.floor(item.total_active_seconds / 60);
+    const totalTargetMins = Math.floor(((item.target_duration_seconds || 0) + (item.extended_duration_seconds || 0)) / 60);
+    
+    const deltaMins = activeMins - totalTargetMins;
+    let deltaHtml = '';
+
+    if (item.status === 'long_interruption') {
+      deltaHtml = '<span class="delta-tag delta-longbreak">☕ Long Break</span>';
+    } else if (item.status === 'target_not_achieved') {
+      deltaHtml = '<span class="delta-tag delta-unachieved">❌ Target Unachieved</span>';
+    } else if (totalTargetMins === 0) {
+      deltaHtml = '<span class="delta-tag">No Target</span>';
+    } else if (deltaMins > 0) {
+      deltaHtml = `<span class="delta-tag delta-extended">+${deltaMins}m Extended</span>`;
+    } else if (deltaMins < 0) {
+      deltaHtml = `<span class="delta-tag delta-saved">${Math.abs(deltaMins)}m Saved</span>`;
+    } else {
+      deltaHtml = `<span class="delta-tag" style="background:#334155;">Exact Target</span>`;
+    }
+
+    let pauseHtml = '<span style="color: #64748b;">No breaks</span>';
+    if (item.pauses && item.pauses.length > 0) {
+      const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
+      if (shortPauses.length > 0) {
+        pauseHtml = '<ul class="pause-list">';
+        shortPauses.forEach((p, idx) => {
+          const pStart = new Date(p.pause_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const pEnd = p.pause_end ? new Date(p.pause_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ongoing';
+          pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
+        });
+        pauseHtml += '</ul>';
+      }
+    }
+
+    const modeBadge = `<span class="badge" style="background: ${item.session_mode === 'practice_exam' ? '#8b5cf6' : '#3b82f6'}">${item.session_mode.toUpperCase().replace('_', ' ')}</span>`;
+
+    row.innerHTML = `
+      <td><strong>${formattedDate}</strong><br><small style="color:#94a3b8">${formattedTime}</small></td>
+      <td>${modeBadge}<br><strong>${escapeHtml(item.subject)}</strong></td>
+      <td><strong>${escapeHtml(item.topic)}</strong><br><small style="color:#94a3b8">${escapeHtml(item.platform)}</small></td>
+      <td><strong>${escapeHtml(item.target_goal || 'None')}</strong><br><small style="color:#94a3b8">${escapeHtml(item.study_type)}</small></td>
+      <td><strong>${activeMins} mins</strong></td>
+      <td>${deltaHtml}<br><small style="color:#94a3b8">Target: ${totalTargetMins}m</small></td>
+      <td>${pauseHtml}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"']/g, function(m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]; });
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎯 Mission GATE 2027 - Study & Practice Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    
+    <!-- Top Banner with Daily Metrics -->
+    <header class="top-banner">
+      <div class="title-section">
+        <h1>🎯 Mission GATE 2027</h1>
+        <p class="subtitle">Focused Preparation & Exam Practice Tracker</p>
+      </div>
+
+      <div class="top-metrics-grid">
+        <div class="stat-badge primary-badge">
+          <span class="stat-label">TODAY'S STUDY TIME</span>
+          <span id="top-daily-time" class="stat-value">0h 0m</span>
+        </div>
+        <div class="stat-badge warning-badge">
+          <span class="stat-label">DAILY BREAKS COUNT</span>
+          <span id="top-daily-break-count" class="stat-value">0</span>
+        </div>
+        <div class="stat-badge danger-badge">
+          <span class="stat-label">DAILY BREAK TIME</span>
+          <span id="top-daily-break-time" class="stat-value">0m</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Session Configuration & Active Timer Card -->
+    <section class="card timer-card">
+      <div id="session-setup" class="session-form-container">
+        <div class="mode-toggle-group">
+          <label class="radio-label">
+            <input type="radio" name="session_mode" value="study" checked>
+            <span>📖 Study / Learning Session</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="session_mode" value="practice_exam">
+            <span>📝 Practice Exam / Test Series</span>
+          </label>
+        </div>
+
+        <form id="start-form" class="inputs-grid">
+          <div class="input-field">
+            <label id="lbl-subject">Subject Name</label>
+            <input type="text" id="inp-subject" placeholder="e.g. DBMS, Operating Systems, Algo..." required />
+          </div>
+
+          <div class="input-field">
+            <label id="lbl-topic">Chapter / Topic Name</label>
+            <input type="text" id="inp-topic" placeholder="e.g. B+ Trees, Process Sync, Dynamic Prog..." required />
+          </div>
+
+          <div class="input-field">
+            <label id="lbl-platform">Platform / Source</label>
+            <input type="text" id="inp-platform" placeholder="e.g. YouTube, NPTEL, MadeEasy, LeetCode..." required />
+          </div>
+
+          <div class="input-field">
+            <label id="lbl-target">Session Target / Goal</label>
+            <input type="text" id="inp-target" placeholder="e.g. Complete 25 PYQs, Finish 2 lectures..." />
+          </div>
+
+          <div class="input-field">
+            <label id="lbl-type">Type / Category</label>
+            <select id="inp-type"></select>
+          </div>
+
+        <div class="input-field">
+          <label>Target Timer Duration</label>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+              <input type="number" id="inp-target-hrs" min="0" max="24" value="1" style="width: 100%;" />
+              <span style="color: #94a3b8; font-weight: bold; font-size: 0.9rem;">hrs</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+              <input type="number" id="inp-target-mins" min="0" max="59" value="0" style="width: 100%;" />
+              <span style="color: #94a3b8; font-weight: bold; font-size: 0.9rem;">mins</span>
+            </div>
+          </div>
+        </div>
+
+          <div class="form-actions">
+            <button type="submit" id="start-btn" class="btn primary">Start Mission Session</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Active Running Session Screen -->
+      <div id="active-session" class="session-display hidden">
+        <div class="session-header">
+          <span class="badge" id="status-badge">STUDYING</span>
+          <span class="badge-mode" id="mode-display-badge">STUDY</span>
+          <h2 id="current-topic-display">Topic Name</h2>
+          <p id="current-meta-display" class="meta-subtext">Subject • Platform • Target</p>
+        </div>
+
+        <!-- Dual Timers Grid -->
+        <div class="dual-timers">
+          <div class="timer-box">
+            <span class="timer-label">⏱️ ACTIVE TIME ELAPSED</span>
+            <div class="timer-display" id="timer-display">00:00:00</div>
+          </div>
+
+          <div class="timer-box target-box" id="target-timer-container">
+            <span class="timer-label">⏳ TARGET COUNTDOWN TIMER</span>
+            <div class="timer-display target-display" id="target-countdown-display">00:00:00</div>
+            <span class="timer-subtext" id="target-status-subtext">Runs only during active study</span>
+          </div>
+        </div>
+
+        <!-- Target Notification Alert Box (Shown when Target Reaches 0) -->
+        <div id="target-reached-alert" class="alert-box hidden">
+          🎯 <strong>Target Time Reached!</strong> Would you like to extend your session target?
+          <div class="extend-btns">
+            <button class="btn extend-btn" data-mins="15">+15 Mins</button>
+            <button class="btn extend-btn" data-mins="30">+30 Mins</button>
+            <button class="btn extend-btn" data-mins="60">+60 Mins</button>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="pause-btn" class="btn warning">Interrupt / Pause</button>
+          <button id="resume-btn" class="btn success hidden">Resume Session</button>
+          <button id="extend-custom-btn" class="btn secondary">+ Extend Target</button>
+          <button id="end-btn" class="btn danger">End Session</button>
+          <!-- Add inside <div class="controls"> -->
+          <button id="long-break-btn" class="btn indigo">☕ Long-Term Break</button>
+          <button id="target-unachieved-btn" class="btn dark-danger">❌ Target Unachieved</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analytics Dashboard (Heatmap + Side Stats) -->
+    <section class="card analytics-card">
+      <div class="analytics-layout">
+        <div class="heatmap-section">
+          <div class="card-header">
+            <h3>🔥 365-Day Study Activity Heatmap</h3>
+            <span class="subtext">Daily study volume distribution</span>
+          </div>
+          <div id="heatmap-container" class="heatmap-grid"></div>
+          <!-- LeetCode-style Floating Tooltip Popup -->
+          <div id="heatmap-tooltip" class="heatmap-tooltip hidden"></div>
+          <!-- AFTER (What to replace it with) -->
+            <!-- REPLACE <div class="heatmap-legend"> IN public/index.html WITH THIS: -->
+            <div class="heatmap-legend">
+              <div class="legend-item"><span class="square lvl-0"></span> 0m</div>
+              <div class="legend-item"><span class="square lvl-3"></span> 30m</div>
+              <div class="legend-item"><span class="square lvl-6"></span> 1h</div>
+              <div class="legend-item"><span class="square lvl-10"></span> 2h</div>
+              <div class="legend-item"><span class="square lvl-14"></span> 4h</div>
+              <div class="legend-item"><span class="square lvl-18"></span> 6h</div>
+              <div class="legend-item"><span class="square lvl-22"></span> 10h</div>
+              <div class="legend-item"><span class="square lvl-25"></span> 12h+</div>
+            </div>
+        </div>
+
+        <div class="stats-sidebar">
+          <div class="side-stat-card">
+            <div class="icon">📅</div>
+            <div>
+              <span class="side-stat-label">This Week (7 Days)</span>
+              <div id="stat-weekly-time" class="side-stat-value">0h 0m</div>
+            </div>
+          </div>
+
+          <div class="side-stat-card">
+            <div class="icon">🗓️</div>
+            <div>
+              <span class="side-stat-label">This Month (30 Days)</span>
+              <div id="stat-monthly-time" class="side-stat-value">0h 0m</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Detailed History Session -->
+    <section class="card">
+      <h3>📜 Session History & Time Variance Analysis</h3>
+      <div class="table-responsive">
+       <table>
+        <thead>
+          <tr>
+            <th>Date & Time</th>
+            <th>Mode & Subject</th>
+            <th>Topic / Chapter & Platform</th>
+            <th>Type & Goal</th>
+            <th>Active Duration</th>
+            <th>Target vs Actual Variance</th>
+            <th>Break / Interruption Logs</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody">
+          <tr><td colspan="7" class="text-center">Loading GATE history...</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+
+  <!-- Continuation Modal Popup -->
+<div id="continuation-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-icon">⏳</span>
+      <h3>Interrupted Session Detected</h3>
+    </div>
+    <p id="modal-session-info">You have a previously suspended study session.</p>
+    <div class="modal-actions">
+      <button id="modal-resume-btn" class="btn success">▶️ Continue Previous Session</button>
+      <button id="modal-new-btn" class="btn danger">🆕 Start New Session</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+:root {
+  --bg-color: #0f172a;
+  --card-bg: #1e293b;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --primary: #3b82f6;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --purple: #8b5cf6;
+  --border-color: #334155;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  padding: 24px;
+}
+
+.container {
+  max-width: 1150px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Top Banner */
+.top-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 1px solid var(--border-color);
+  padding: 20px 24px;
+  border-radius: 12px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.top-banner h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  color: #38bdf8;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  margin: 4px 0 0 0;
+  font-size: 0.9rem;
+}
+
+.top-metrics-grid {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stat-badge {
+  padding: 10px 16px;
+  border-radius: 10px;
+  text-align: center;
+  min-width: 120px;
+}
+
+.primary-badge { background: rgba(59, 130, 246, 0.15); border: 1px solid #3b82f6; }
+.warning-badge { background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; }
+.danger-badge { background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; }
+
+.stat-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: #fff;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+
+/* Session Form Inputs */
+.mode-toggle-group {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.radio-label {
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+}
+
+.inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+input[type="text"], input[type="number"], select {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn:hover { opacity: 0.9; }
+.btn.primary { background: var(--primary); color: #fff; }
+.btn.secondary { background: var(--purple); color: #fff; }
+.btn.success { background: var(--success); color: #fff; }
+.btn.warning { background: var(--warning); color: #fff; }
+.btn.danger { background: var(--danger); color: #fff; }
+
+.hidden { display: none !important; }
+
+/* Active Session View */
+.session-display {
+  text-align: center;
+}
+
+.meta-subtext {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-top: 4px;
+}
+
+.dual-timers {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin: 24px 0;
+  flex-wrap: wrap;
+}
+
+.timer-box {
+  background: #0f172a;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 28px;
+  min-width: 260px;
+}
+
+.timer-box.target-box {
+  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.timer-label {
+  font-size: 0.75rem;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  display: block;
+}
+
+.timer-display {
+  font-size: 2.8rem;
+  font-family: monospace;
+  font-weight: bold;
+  margin: 8px 0;
+  color: #38bdf8;
+}
+
+.target-display {
+  color: #a78bfa;
+}
+
+.timer-subtext {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.badge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  background: var(--primary);
+}
+
+.badge-mode {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  background: var(--purple);
+  margin-left: 8px;
+}
+
+/* Alert Box */
+.alert-box {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid #f59e0b;
+  padding: 16px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.extend-btns {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.extend-btn {
+  background: #f59e0b;
+  color: #000;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Analytics & Heatmap */
+.analytics-layout {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .analytics-layout { grid-template-columns: 1fr; }
+}
+
+/* AFTER (What to replace it with) */
+/* 3-Month Heatmap Container with Flex Wrapping */
+.heatmap-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: flex-start;
+  padding: 12px 0;
+}
+
+.month-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #0f172a;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.month-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #38bdf8;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.days-grid {
+  display: grid;
+  grid-template-rows: repeat(7, 14px);
+  grid-auto-flow: column;
+  grid-auto-columns: 14px;
+  gap: 4px;
+}
+
+/* Day Tile Styles */
+.square {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.square:hover {
+  transform: scale(1.3);
+  outline: 1.5px solid #ffffff;
+  z-index: 10;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+}
+
+/* LeetCode-Style Floating Popup Tooltip */
+.heatmap-tooltip {
+  position: absolute;
+  background: #090d16;
+  color: #f8fafc;
+  border: 1px solid #3b82f6;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 9999;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 10px rgba(59, 130, 246, 0.3);
+  white-space: nowrap;
+  transform: translate(-50%, -120%);
+  transition: opacity 0.1s ease, transform 0.1s ease;
+}
+
+.heatmap-tooltip strong {
+  color: #38bdf8;
+}
+
+/* REPLACE ALL .square.lvl-X RULES IN public/style.css WITH THIS: */
+.square.lvl-0  { background-color: #1e293b; border: 1px solid #334155; } /* 0m */
+
+/* 0 - 1h (Green spectrum) */
+.square.lvl-1  { background-color: #022c22; } /* 10m */
+.square.lvl-2  { background-color: #064e3b; } /* 20m */
+.square.lvl-3  { background-color: #047857; } /* 30m */
+.square.lvl-4  { background-color: #059669; } /* 40m */
+.square.lvl-5  { background-color: #10b981; } /* 50m */
+.square.lvl-6  { background-color: #34d399; } /* 1h  */
+
+/* 1h - 2h (Teal & Sky Blue spectrum) */
+.square.lvl-7  { background-color: #14b8a6; } /* 1h 15m */
+.square.lvl-8  { background-color: #06b6d4; } /* 1h 30m */
+.square.lvl-9  { background-color: #0ea5e9; } /* 1h 45m */
+.square.lvl-10 { background-color: #38bdf8; } /* 2h */
+
+/* 2h - 6h (Blue & Indigo spectrum) */
+.square.lvl-11 { background-color: #60a5fa; } /* 2.5h */
+.square.lvl-12 { background-color: #3b82f6; } /* 3h */
+.square.lvl-13 { background-color: #2563eb; } /* 3.5h */
+.square.lvl-14 { background-color: #1d4ed8; } /* 4h */
+.square.lvl-15 { background-color: #818cf8; } /* 4.5h */
+.square.lvl-16 { background-color: #6366f1; } /* 5h */
+.square.lvl-17 { background-color: #4f46e5; } /* 5.5h */
+.square.lvl-18 { background-color: #4338ca; } /* 6h */
+
+/* > 6h (Purple -> Magenta -> Rose -> Gold spectrum) */
+.square.lvl-19 { background-color: #a855f7; } /* 7h */
+.square.lvl-20 { background-color: #9333ea; } /* 8h */
+.square.lvl-21 { background-color: #d946ef; } /* 9h */
+.square.lvl-22 { background-color: #c026d3; } /* 10h */
+.square.lvl-23 { background-color: #f43f5e; } /* 11h */
+.square.lvl-24 { background-color: #e11d48; } /* 12h */
+.square.lvl-25 { background-color: #fbbf24; } /* 12h+ */
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+}
+
+.stats-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #0f172a;
+  border: 1px solid var(--border-color);
+  padding: 12px 16px;
+  border-radius: 10px;
+}
+
+.side-stat-label { font-size: 0.75rem; color: var(--text-muted); display: block; }
+.side-stat-value { font-size: 1.25rem; font-weight: bold; color: #fff; }
+
+/* Table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.88rem;
+}
+
+th { color: var(--text-muted); font-weight: 500; }
+
+.pause-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 0.8rem;
+  color: #f59e0b;
+}
+
+.delta-tag {
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.delta-extended { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.delta-saved { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+.text-center { text-align: center; }
+
+/* Color & Button additions */
+:root {
+  --indigo: #6366f1;
+}
+
+.btn.indigo { background: var(--indigo); color: #fff; }
+.btn.dark-danger { background: #991b1b; color: #fff; }
+
+/* History Status Tags */
+.delta-longbreak { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+.delta-unachieved { background: rgba(239, 68, 68, 0.25); color: #ef4444; }
+
+/* Continuation Modal Popup */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 10000;
+}
+
+.modal-box {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  padding: 28px 32px;
+  border-radius: 16px;
+  max-width: 480px; width: 90%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+.modal-header {
+  display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 12px;
+}
+
+.modal-icon { font-size: 1.8rem; }
+.modal-header h3 { margin: 0; font-size: 1.3rem; color: #38bdf8; }
+
+.modal-actions {
+  display: flex; gap: 12px; margin-top: 24px; justify-content: center; flex-wrap: wrap;
+}
+# 🎯 Mission GATE 2027 - Study & Practice Tracker (v3.0)
+
+A specialized full-stack study time tracker and test series analytics application designed for GATE 2027 preparation, built with Node.js, Express, MySQL, HTML5, CSS3, and JavaScript.
+
+---
+
+## 🌟 What's New in Version 3.0
+
+1. **Project Name:** Updated branding to **Mission GATE 2027**.
+2. **Session Mode Split:** Switch between **📖 Study / Learning Session** and **📝 Practice Exam / Test Series**.
+3. **Subdivided Input Fields:**
+   - **Study Mode:** Subject Name, Chapter/Topic Name, Study Platform (YouTube, MadeEasy, NPTEL), Target/Goal, and Study Type (`Fresh Study` or `Revision`).
+   - **Practice Exam Mode:** Exam/Subject Name, Test Name, Platform/Test Series Name, Target Score, and Category (`Full Length Test`, `Subject Test`, `Topic Test`).
+4. **Auto-Fill & Pre-filling Memory:** Automatically pre-fills input fields with your previous session details on load, while allowing full editing prior to starting.
+5. **Countdown Target Timer & Notifications:** Set target duration in minutes. The countdown timer ticks down *only* while the session is active. Triggers browser alerts and notifications upon expiration, offering options to extend (+15m, +30m, +60m, or custom).
+6. **Time Variance Analysis in History:** Displays how much active time exceeded or finished early compared to the predicted target duration (`+Xm Extended` vs `-Ym Saved`).
+7. **Daily Interruption Metrics (Top Banner):** Top banner highlights:
+   - Today's Total Active Study Time
+   - Today's Number of Breaks / Interruptions
+   - Today's Cumulative Duration of Breaks / Interruptions
+
+---
+
+## ⚙️ Configuration & Execution
+
+### 1. Database Setup
+Run `schema.sql` in MySQL Workbench or Command Line to update/create tables.
+
+### 2. `.env` Credentials
+Configure `.env` with your local MySQL password:
+```env
+PORT=3000
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=YOUR_ACTUAL_MYSQL_PASSWORD
+DB_NAME=study_tracker
+```
+
+### 3. Run Application
+```bash
+npm install
+npm start
+```
+Access at `http://localhost:3000`.
+
+---
+
+### Option B: Running in Background via PM2 (Without VS Code)
+
+To keep the application running persistently in the background—even after closing VS Code or terminal windows:
+
+1. Install **PM2** globally on your system:
+   
+   npm install -g pm2
+2.Navigate to your project folder and start the application under PM2:Bash
+
+pm2 start server.js --name "study-tracker"
+
+3.Save the current PM2 process list so it automatically restarts upon system reboots:Bash
+pm2 save
+
+4.Useful PM2 Commands:
+    Check Status: 
+        pm2 status
+    View Live Logs: 
+        pm2 logs study-tracker
+    Restart App: 
+        pm2 restart study-tracker
+    Stop App: 
+        pm2 stop study-tracker
+    Delete app:
+         pm2 delete study-tracker
+    
+# 📡 API Endpoints Overview
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/session/current` | Retrieves the current active/interrupted session and pause log |
+| `POST` | `/api/session/start` | Starts a new study session topic |
+| `POST` | `/api/session/heartbeat` | Updates active study duration and heartbeat timestamp |
+| `POST` | `/api/session/pause` | Logs an interruption / pause interval |
+| `POST` | `/api/session/resume` | Resumes an interrupted study session |
+| `POST` | `/api/session/end` | Completes and closes the study session |
+| `GET` | `/api/analytics/summary` | Fetches daily, weekly, and monthly study time and break counts |
+| `GET` | `/api/analytics/heatmap` | Aggregates past 365-day study data for the contribution grid |
+| `GET` | `/api/history` | Fetches recent study session logs and granular pause timestamps |

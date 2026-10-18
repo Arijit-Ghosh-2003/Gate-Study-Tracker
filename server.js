@@ -47,36 +47,21 @@ function triggerSystemAlert(type, topicName, extraText) {
 // -------------------------------------------------------------
 async function processActiveSessions() {
   try {
-    // 1. Cleanup stale sessions if tab/app was abruptly closed without heartbeat (> 35s)
-    const [staleSessions] = await db.query(
-      `SELECT id, start_time, last_heartbeat FROM study_sessions WHERE status = 'active' AND last_heartbeat < NOW() - INTERVAL 35 SECOND`
-    );
+    // -----------------------------------------------------------------
+    // Stale cleanup (>35s) removed so sessions continue running on backend
+    // even if browser/tab is closed or device is turned off.
+    // -----------------------------------------------------------------
 
-    for (const session of staleSessions) {
-      const activeDelta = Math.max(0, Math.floor((new Date(session.last_heartbeat) - new Date(session.start_time)) / 1000));
-      
-      // Update session status to long_interruption instead of terminated
-      await db.query(
-        `UPDATE study_sessions SET status = 'long_interruption', end_time = last_heartbeat, total_active_seconds = ? WHERE id = ?`,
-        [activeDelta, session.id]
-      );
-      
-      // Log long-term pause interval
-      await db.query(
-        `INSERT INTO pause_intervals (session_id, pause_start, pause_end, pause_type) VALUES (?, NOW(), NOW(), 'long_term')`,
-        [session.id]
-      );
-    }
-
-    // 2. Check milestone notifications for running sessions
+    // Check milestone notifications for running sessions
     const [activeSessions] = await db.query(
       `SELECT * FROM study_sessions WHERE status = 'active'`
     );
 
     for (const s of activeSessions) {
-      const lastHb = new Date(s.last_heartbeat);
+      const startTime = new Date(s.start_time);
       const now = new Date();
-      const liveSeconds = (s.total_active_seconds || 0) + Math.max(0, Math.floor((now - lastHb) / 1000));
+      // Calculate live seconds dynamically based on start time
+      const liveSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
       const totalTargetSecs = (s.target_duration_seconds || 0) + (s.extended_duration_seconds || 0);
 
       if (totalTargetSecs <= 0) continue;
@@ -104,15 +89,34 @@ setInterval(processActiveSessions, 2000);
 
 // --- API ENDPOINTS ---
 
+
 app.get('/api/session/current', async (req, res) => {
   try {
-const [rows] = await db.query(
-  `SELECT * FROM study_sessions WHERE status IN ('active', 'paused', 'long_interruption') ORDER BY id DESC LIMIT 1`
-);
+    const [rows] = await db.query(
+      `SELECT * FROM study_sessions WHERE status IN ('active', 'paused', 'long_interruption') ORDER BY id DESC LIMIT 1`
+    );
     if (rows.length === 0) return res.json({ session: null });
 
     const session = rows[0];
-    const [pauses] = await db.query(`SELECT * FROM pause_intervals WHERE session_id = ? ORDER BY pause_start ASC`, [session.id]);
+
+    if (session.status === 'active') {
+      // Re-calculate total active seconds on server fetch (start_time to NOW minus pause duration)
+      const [pauseSum] = await db.query(
+        `SELECT IFNULL(SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))), 0) as total_paused 
+         FROM pause_intervals WHERE session_id = ?`,
+        [session.id]
+      );
+      
+      const totalPaused = pauseSum[0].total_paused || 0;
+      const totalElapsed = Math.max(0, Math.floor((new Date() - new Date(session.start_time)) / 1000));
+      session.total_active_seconds = Math.max(0, totalElapsed - totalPaused);
+    }
+
+    const [pauses] = await db.query(
+      `SELECT * FROM pause_intervals WHERE session_id = ? ORDER BY pause_start ASC`, 
+      [session.id]
+    );
+
     res.json({ session, pauses });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -254,9 +258,18 @@ app.get('/api/analytics/heatmap', async (req, res) => {
 
 app.get('/api/history', async (req, res) => {
   try {
-    const [sessions] = await db.query(`SELECT s.* FROM study_sessions s ORDER BY s.start_time DESC LIMIT 100`);
+    const [sessions] = await db.query(
+      `SELECT s.* FROM study_sessions s ORDER BY s.start_time DESC LIMIT 100`
+    );
     for (const session of sessions) {
-      const [pauses] = await db.query(`SELECT pause_start, pause_end FROM pause_intervals WHERE session_id = ? ORDER BY pause_start ASC`, [session.id]);
+      // Filter SQL directly to retrieve only short-term / normal breaks
+      const [pauses] = await db.query(
+        `SELECT pause_start, pause_end, pause_type 
+         FROM pause_intervals 
+         WHERE session_id = ? AND (pause_type IS NULL OR pause_type = 'short') 
+         ORDER BY pause_start ASC`,
+        [session.id]
+      );
       session.pauses = pauses;
     }
     res.json({ history: sessions });

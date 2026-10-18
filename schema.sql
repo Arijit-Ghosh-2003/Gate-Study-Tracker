@@ -47,12 +47,12 @@ ADD COLUMN pause_type ENUM('short', 'long_term') DEFAULT 'short';
 Select * from study_sessions;
 Select * from pause_intervals;
 
--- update study_sessions
--- set status='target_not_achieved'
--- where id=7;
+update study_sessions
+set status='long_interruption'
+where id=15;
 
 -- Delete from study_sessions
--- where id=11;
+-- where id=14;
 
 -- SELECT 
 --     table_name AS `Table`,
@@ -63,3 +63,48 @@ Select * from pause_intervals;
 --     ROUND((data_length + index_length) / IFNULL(NULLIF(table_rows, 0), 1), 0) AS `Avg Bytes / Row`
 -- FROM information_schema.tables
 -- WHERE table_schema = 'study_tracker';
+
+UPDATE study_sessions 
+SET 
+  total_active_seconds = 2220,
+  end_time = DATE_ADD(start_time, INTERVAL 37 MINUTE),
+  status = 'completed'
+WHERE id = 16;
+
+UPDATE pause_intervals 
+SET pause_end = NOW() 
+WHERE id = 336;
+
+UPDATE study_sessions s
+SET total_active_seconds = (
+  TIMESTAMPDIFF(SECOND, s.start_time, IFNULL(s.end_time, NOW())) - (
+    SELECT IFNULL(SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))), 0)
+    FROM pause_intervals
+    WHERE session_id = s.id
+  )
+)
+WHERE s.id = 16;
+
+-- View session total duration vs break duration
+SELECT 
+  s.id AS session_id,
+  s.start_time,
+  s.end_time,
+  TIMESTAMPDIFF(SECOND, s.start_time, s.end_time) AS total_session_sec,
+  p.id AS pause_id,
+  p.pause_start,
+  p.pause_end,
+  TIMESTAMPDIFF(SECOND, p.pause_start, p.pause_end) AS break_sec
+FROM study_sessions s
+JOIN pause_intervals p ON s.id = p.session_id
+WHERE s.id = 16;
+
+UPDATE study_sessions s
+SET total_active_seconds = GREATEST(0, (
+  TIMESTAMPDIFF(SECOND, s.start_time, IFNULL(s.end_time, NOW())) - (
+    SELECT IFNULL(SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))), 0)
+    FROM pause_intervals
+    WHERE session_id = s.id
+  )
+))
+WHERE s.id = 16;

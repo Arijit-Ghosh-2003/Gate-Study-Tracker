@@ -355,16 +355,20 @@ input[type="text"], input[type="number"], select {
    HIGH-CONTRAST 26-TIER HEATMAP GRADIENT PALETTE
    ============================================================= */
 
+/* =============================================================
+   HIGH-CONTRAST 26-TIER HEATMAP GRADIENT PALETTE
+   ============================================================= */
+
 /* 0m Baseline */
 .square.lvl-0  { background-color: #1e293b; border: 1px solid #334155; }
 
 /* -------------------------------------------------------------
    LEVELS 1 to 10: HIGH-CONTRAST PROGRESSION (0 - 2 Hours)
    ------------------------------------------------------------- */
-.square.lvl-1  { background-color: #047857; } /* 10m  - Deep Emerald Green (Pops off dark background) */
-.square.lvl-2  { background-color: #10b981; } /* 20m  - Bright Spring Green */
-.square.lvl-3  { background-color: #22c55e; } /* 30m  - Neon Lime */
-.square.lvl-4  { background-color: #34d399; } /* 40m  - Aquamarine Mint */
+.square.lvl-1  { background-color: #064e3b; } /* 10m  - Dark Forest Green */
+.square.lvl-2  { background-color: #047857; } /* 20m  - Deep Emerald Green */
+.square.lvl-3  { background-color: #059669; } /* 30m  - Rich Jade Green */
+.square.lvl-4  { background-color: #10b981; } /* 40m  - Vibrant Emerald */
 .square.lvl-5  { background-color: #06b6d4; } /* 50m  - Electric Cyan */
 .square.lvl-6  { background-color: #38bdf8; } /* 1h   - Vibrant Sky Blue */
 .square.lvl-7  { background-color: #0284c7; } /* 1h15m - Deep Ocean Blue */
@@ -395,7 +399,6 @@ input[type="text"], input[type="number"], select {
   background-color: #ffffff; 
   box-shadow: 0 0 8px #fde047; /* Neon Gold Glow */
 } /* > 12h */
-
 .heatmap-legend {
   display: flex;
   align-items: center;

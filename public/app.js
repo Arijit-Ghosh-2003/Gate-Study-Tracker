@@ -74,6 +74,10 @@ let activeSeconds = 0;
 let targetRemainingSeconds = 0;
 let notificationFired = false;
 
+let milestone50Fired = false;
+let milestone75Fired = false;
+let milestone100Fired = false;
+
 document.addEventListener('DOMContentLoaded', () => {
   init();
 
@@ -294,6 +298,11 @@ function startTimer() {
   stopTimer();
   notificationFired = false;
 
+  // 🟢 Reset milestone flags
+  milestone50Fired = false;
+  milestone75Fired = false;
+  milestone100Fired = false;
+
   timerInterval = setInterval(() => {
     activeSeconds++;
     updateTimerDisplay();
@@ -417,6 +426,7 @@ async function extendTargetTime(additionalMins) {
 
   currentSession.extended_duration_seconds = (currentSession.extended_duration_seconds || 0) + (additionalMins * 60);
   notificationFired = false;
+  milestone100Fired = false; // Reset 100% flag for extended time
   document.getElementById('target-reached-alert').classList.add('hidden');
   updateTimerDisplay();
 }

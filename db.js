@@ -3,11 +3,12 @@ require('dotenv').config();
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT, 10) || 3306,
+  port: parseInt(process.env.DB_PORT, 10) || 18160,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'study_tracker',
-  timezone: '+05:30', // Forces MySQL connection to use IST offset
+  database: process.env.DB_NAME || 'defaultdb',
+  timezone: '+05:30',         // Session timezone for IST
+  dateStrings: true,          // 🟢 CRITICAL: Prevents mysql2 from converting DATETIME/DATE into UTC JS Date objects
   ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' ? { rejectUnauthorized: false } : false,
   waitForConnections: true,
   connectionLimit: 10,

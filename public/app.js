@@ -559,10 +559,11 @@ async function loadHeatmap() {
   const { data } = await res.json();
 
   const activityMap = {};
-  data.forEach(item => {
-    const dateStr = new Date(item.date).toISOString().split('T')[0];
-    activityMap[dateStr] = item.total_seconds;
-  });
+// ✅ NEW (PRESERVES EXACT IST DATE):
+data.forEach(item => {
+  const dateStr = typeof item.date === 'string' ? item.date.split('T')[0] : item.date;
+  activityMap[dateStr] = item.total_seconds;
+});
 
   const container = document.getElementById('heatmap-container');
   const tooltip = document.getElementById('heatmap-tooltip');

@@ -246,9 +246,11 @@ const [dailyInterruptionTime] = await db.query(`
 app.get('/api/analytics/heatmap', async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT DATE(start_time) as date, SUM(total_active_seconds) as total_seconds
-      FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
-      GROUP BY DATE(start_time) ORDER BY date ASC
+      SELECT DATE_FORMAT(start_time, '%Y-%m-%d') as date, SUM(total_active_seconds) as total_seconds
+      FROM study_sessions 
+      WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+      GROUP BY DATE_FORMAT(start_time, '%Y-%m-%d') 
+      ORDER BY date ASC
     `);
     res.json({ data: rows });
   } catch (err) {

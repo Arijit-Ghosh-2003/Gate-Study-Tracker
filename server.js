@@ -319,3 +319,25 @@ app.get('/api/debug-db', async (req, res) => {
     });
   }
 });
+
+// Add to server.js
+app.get('/api/debug-time', async (req, res) => {
+  try {
+    const [dbTime] = await db.query(`
+      SELECT 
+        NOW() as db_now, 
+        @@global.time_zone as global_tz, 
+        @@session.time_zone as session_tz,
+        CURDATE() as db_curdate
+    `);
+
+    res.json({
+      render_server_time: new Date().toString(),
+      render_iso_utc: new Date().toISOString(),
+      render_tz_env: process.env.TZ || 'Not Set (Defaulting to UTC)',
+      database_time: dbTime[0]
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});

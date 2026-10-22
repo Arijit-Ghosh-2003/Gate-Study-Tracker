@@ -203,13 +203,11 @@ async function loadCurrentSession() {
 
   if (data.session) {
     currentSession = data.session;
+    
+    // Set activeSeconds directly to the server-calculated live total
     activeSeconds = currentSession.total_active_seconds || 0;
 
     if (currentSession.status === 'active') {
-      const lastHeartbeat = new Date(currentSession.last_heartbeat);
-      const now = new Date();
-      const elapsedSinceHeartbeat = Math.max(0, Math.floor((now - lastHeartbeat) / 1000));
-      activeSeconds += elapsedSinceHeartbeat;
       renderActiveSessionUI();
       startTimer();
     } else if (currentSession.status === 'paused' || currentSession.status === 'long_interruption') {

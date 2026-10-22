@@ -92,24 +92,36 @@ setInterval(processActiveSessions, 2000);
 
 app.get('/api/session/current', async (req, res) => {
   try {
+    // 1. Fetch the latest active or paused session
     const [rows] = await db.query(
-      `SELECT * FROM study_sessions WHERE status IN ('active', 'paused', 'long_interruption') ORDER BY id DESC LIMIT 1`
+      `SELECT * FROM study_sessions 
+       WHERE status IN ('active', 'paused', 'long_interruption') 
+       ORDER BY id DESC LIMIT 1`
     );
     if (rows.length === 0) return res.json({ session: null });
 
     const session = rows[0];
 
+    // 2. If active, calculate total elapsed seconds on the fly
     if (session.status === 'active') {
-      // Re-calculate total active seconds on server fetch (start_time to NOW minus pause duration)
       const [pauseSum] = await db.query(
         `SELECT IFNULL(SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))), 0) as total_paused 
          FROM pause_intervals WHERE session_id = ?`,
         [session.id]
       );
       
-      const totalPaused = pauseSum[0].total_paused || 0;
-      const totalElapsed = Math.max(0, Math.floor((new Date() - new Date(session.start_time)) / 1000));
-      session.total_active_seconds = Math.max(0, totalElapsed - totalPaused);
+      const totalPausedSeconds = pauseSum[0].total_paused || 0;
+      
+      // Elapsed = (Server NOW - start_time) - total_paused
+      const [timeDiff] = await db.query(
+        `SELECT TIMESTAMPDIFF(SECOND, start_time, NOW()) as total_elapsed FROM study_sessions WHERE id = ?`,
+        [session.id]
+      );
+
+      const totalElapsedSeconds = timeDiff[0].total_elapsed || 0;
+      
+      // Override total_active_seconds with the calculated live value
+      session.total_active_seconds = Math.max(0, totalElapsedSeconds - totalPausedSeconds);
     }
 
     const [pauses] = await db.query(

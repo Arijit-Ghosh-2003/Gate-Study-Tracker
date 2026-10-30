@@ -657,13 +657,24 @@ async function loadHistory() {
     const row = document.createElement('tr');
     
     // Format Start Date & Time
-    const startDateObj = new Date(item.start_time);
+// Handles raw strings and explicit ISO UTC strings automatically
+    const startDateObj = new Date(
+      typeof item.start_time === 'string' && !item.start_time.endsWith('Z')
+        ? item.start_time.replace(' ', 'T') + 'Z'
+        : item.start_time
+    );
+
     const formattedDate = startDateObj.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric'
     });
-    const formattedTime = startDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Converts UTC to IST (e.g., 02:00 AM UTC -> 07:30 AM IST)
+    const formattedTime = startDateObj.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
 
     const activeMins = Math.floor(item.total_active_seconds / 60);
     const totalTargetMins = Math.floor(((item.target_duration_seconds || 0) + (item.extended_duration_seconds || 0)) / 60);

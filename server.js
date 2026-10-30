@@ -275,13 +275,15 @@ app.get('/api/history', async (req, res) => {
     const scope = req.query.scope || 'all';
     let whereClause = '';
 
-    // Filter sessions starting from Monday of the current calendar week when scope=week
     if (scope === 'week') {
       whereClause = `WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)`;
     }
 
+    // 🟢 DATE_FORMAT appends 'Z' to explicitly flag the stored string as UTC
     const [sessions] = await db.query(
-      `SELECT s.* FROM study_sessions s ${whereClause} ORDER BY s.start_time DESC`
+      `SELECT s.*, DATE_FORMAT(s.start_time, '%Y-%m-%dT%H:%i:%s.000Z') AS start_time 
+       FROM study_sessions s ${whereClause} 
+       ORDER BY s.start_time DESC`
     );
 
     for (const session of sessions) {

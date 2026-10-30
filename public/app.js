@@ -641,14 +641,15 @@ data.forEach(item => {
 // 7. Load History Table with Time Variance
 // REPLACE loadHistory() in public/app.js WITH THIS:
 async function loadHistory() {
-  const res = await fetch('/api/history');
+  // Fetch only this week's history using ?scope=week
+  const res = await fetch('/api/history?scope=week');
   const { history } = await res.json();
 
   const tbody = document.getElementById('history-tbody');
   tbody.innerHTML = '';
 
-  if (history.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No session history recorded yet.</td></tr>';
+  if (!history || history.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No study sessions logged for this week yet.</td></tr>';
     return;
   }
 

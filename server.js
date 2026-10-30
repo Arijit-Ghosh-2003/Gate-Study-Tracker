@@ -272,11 +272,19 @@ app.get('/api/analytics/heatmap', async (req, res) => {
 
 app.get('/api/history', async (req, res) => {
   try {
+    const scope = req.query.scope || 'all';
+    let whereClause = '';
+
+    // Filter sessions starting from Monday of the current calendar week when scope=week
+    if (scope === 'week') {
+      whereClause = `WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)`;
+    }
+
     const [sessions] = await db.query(
-      `SELECT s.* FROM study_sessions s ORDER BY s.start_time DESC LIMIT 100`
+      `SELECT s.* FROM study_sessions s ${whereClause} ORDER BY s.start_time DESC`
     );
+
     for (const session of sessions) {
-      // Filter SQL directly to retrieve only short-term / normal breaks
       const [pauses] = await db.query(
         `SELECT pause_start, pause_end, pause_type 
          FROM pause_intervals 
@@ -286,12 +294,12 @@ app.get('/api/history', async (req, res) => {
       );
       session.pauses = pauses;
     }
+
     res.json({ history: sessions });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 app.post('/api/session/long-interrupt', async (req, res) => {
   const { sessionId, activeSeconds, statusReason } = req.body;
   const newStatus = statusReason === 'target_not_achieved' ? 'target_not_achieved' : 'long_interruption';

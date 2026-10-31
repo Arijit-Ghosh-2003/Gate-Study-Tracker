@@ -231,17 +231,38 @@ app.post('/api/session/end', async (req, res) => {
 
 app.get('/api/analytics/summary', async (req, res) => {
   try {
-    const [dailyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE DATE(start_time) = CURDATE()`);
-// 🟢 NEW: Counts all breaks that are NOT long_term (matches history logic)
-const [dailyInterruptionCount] = await db.query(
-  `SELECT COUNT(*) as total FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND (pause_type IS NULL OR pause_type != 'long_term')`
-);
-const [dailyInterruptionTime] = await db.query(`
-  SELECT SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))) as total 
-  FROM pause_intervals WHERE DATE(pause_start) = CURDATE() AND (pause_type IS NULL OR pause_type != 'long_term')
-`);
-    const [weeklyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`);
-    const [monthlyStudy] = await db.query(`SELECT SUM(total_active_seconds) as total FROM study_sessions WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`);
+    // 🟢 Converts start_time & current server time to IST (+05:30) for exact midnight IST daily resets
+    const [dailyStudy] = await db.query(`
+      SELECT SUM(total_active_seconds) as total 
+      FROM study_sessions 
+      WHERE DATE(CONVERT_TZ(start_time, '+00:00', '+05:30')) = DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30'))
+    `);
+
+    const [dailyInterruptionCount] = await db.query(`
+      SELECT COUNT(*) as total 
+      FROM pause_intervals 
+      WHERE DATE(CONVERT_TZ(pause_start, '+00:00', '+05:30')) = DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30'))
+        AND (pause_type IS NULL OR pause_type != 'long_term')
+    `);
+
+    const [dailyInterruptionTime] = await db.query(`
+      SELECT SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))) as total 
+      FROM pause_intervals 
+      WHERE DATE(CONVERT_TZ(pause_start, '+00:00', '+05:30')) = DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30'))
+        AND (pause_type IS NULL OR pause_type != 'long_term')
+    `);
+
+    const [weeklyStudy] = await db.query(`
+      SELECT SUM(total_active_seconds) as total 
+      FROM study_sessions 
+      WHERE start_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    `);
+
+    const [monthlyStudy] = await db.query(`
+      SELECT SUM(total_active_seconds) as total 
+      FROM study_sessions 
+      WHERE start_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+    `);
 
     res.json({
       daily_seconds: dailyStudy[0].total || 0,

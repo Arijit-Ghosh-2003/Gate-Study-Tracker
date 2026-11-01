@@ -285,10 +285,21 @@ app.get('/api/analytics/summary', async (req, res) => {
 app.get('/api/analytics/heatmap', async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT DATE_FORMAT(start_time, '%Y-%m-%d') as date, SUM(total_active_seconds) as total_seconds
+      SELECT 
+        DATE_FORMAT(CONVERT_TZ(start_time, '+00:00', '+05:30'), '%Y-%m-%d') as date,
+        SUM(
+          CASE 
+            WHEN status = 'active' THEN 
+              GREATEST(0, TIMESTAMPDIFF(SECOND, start_time, NOW()) - (
+                SELECT IFNULL(SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))), 0)
+                FROM pause_intervals WHERE session_id = study_sessions.id
+              ))
+            ELSE total_active_seconds 
+          END
+        ) as total_seconds
       FROM study_sessions 
-      WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
-      GROUP BY DATE_FORMAT(start_time, '%Y-%m-%d') 
+      WHERE start_time >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+      GROUP BY DATE_FORMAT(CONVERT_TZ(start_time, '+00:00', '+05:30'), '%Y-%m-%d') 
       ORDER BY date ASC
     `);
     res.json({ data: rows });

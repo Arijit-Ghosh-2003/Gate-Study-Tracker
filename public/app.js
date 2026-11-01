@@ -595,7 +595,8 @@ data.forEach(item => {
       square.className = `square ${level}`;
 
       // LeetCode-style Floating Tooltip Events
-      square.addEventListener('mouseenter', (e) => {
+// Tile-Anchored Tooltip Events
+      square.addEventListener('mouseenter', () => {
         const d = new Date(dateStr + 'T00:00:00');
         const dateFormatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         
@@ -608,12 +609,13 @@ data.forEach(item => {
         }
 
         tooltip.innerHTML = `${timeStr} on <strong>${dateFormatted}</strong>`;
-        tooltip.classList.remove('hidden');
-      });
 
-      square.addEventListener('mousemove', (e) => {
-        tooltip.style.left = `${e.pageX}px`;
-        tooltip.style.top = `${e.pageY}px`;
+        // Anchoring directly to tile's screen coordinates
+        const rect = square.getBoundingClientRect();
+        tooltip.style.left = `${rect.left + rect.width / 2}px`;
+        tooltip.style.top = `${rect.top - 8}px`;
+
+        tooltip.classList.remove('hidden');
       });
 
       square.addEventListener('mouseleave', () => {

@@ -279,6 +279,9 @@ input[type="text"], input[type="number"], select {
 /* =============================================================
    ENLARGED HEATMAP GRID & MONTH BLOCKS
    ============================================================= */
+/* =============================================================
+   ENLARGED HEATMAP GRID LAYOUT (18px Rounded Tiles)
+   ============================================================= */
 .heatmap-grid {
   display: flex;
   flex-wrap: wrap;
@@ -306,7 +309,6 @@ input[type="text"], input[type="number"], select {
   letter-spacing: 0.5px;
 }
 
-/* Increased tile dimensions from 14px to 18px and gap to 5px */
 .days-grid {
   display: grid;
   grid-template-rows: repeat(7, 18px);
@@ -332,92 +334,188 @@ input[type="text"], input[type="number"], select {
 }
 
 /* =============================================================
-   59-TIER PROGRESSIVE HIGH-CONTRAST PALETTE (0 to 16+ Hours)
+   59-TIER HEATMAP PALETTE (DEEP GREEN -> GLITTER)
    ============================================================= */
 
 /* 0m Baseline */
 .square.lvl-0  { background-color: #1e293b; border: 1px solid #334155; }
 
-/* --- 0 to 1 Hour (10m steps: Emerald to Bright Green) --- */
-.square.lvl-1  { background-color: #064e3b; } /* 10m  */
-.square.lvl-2  { background-color: #046c4e; } /* 20m  */
-.square.lvl-3  { background-color: #047857; } /* 30m  */
-.square.lvl-4  { background-color: #059669; } /* 40m  */
-.square.lvl-5  { background-color: #10b981; } /* 50m  */
-.square.lvl-6  { background-color: #34d399; } /* 1h   */
+/* -------------------------------------------------------------
+   DEEP GREEN TO BRIGHT GREEN (10m to 1h • Lvl 1 - 6)
+   ------------------------------------------------------------- */
+.square.lvl-1  { background-color: #022c22; } /* 10m  - Deepest Forest Green */
+.square.lvl-2  { background-color: #064e3b; } /* 20m  - Dark Emerald */
+.square.lvl-3  { background-color: #047857; } /* 30m  - Medium Jade */
+.square.lvl-4  { background-color: #059669; } /* 40m  - Rich Green */
+.square.lvl-5  { background-color: #10b981; } /* 50m  - Vibrant Emerald */
+.square.lvl-6  { background-color: #34d399; } /* 1h   - Bright Mint Green */
 
-/* --- 1 to 2 Hours (10m steps: Teal to Sky Blue) --- */
-.square.lvl-7  { background-color: #0891b2; } /* 1h 10m */
-.square.lvl-8  { background-color: #06b6d4; } /* 1h 20m */
-.square.lvl-9  { background-color: #22d3ee; } /* 1h 30m */
-.square.lvl-10 { background-color: #0284c7; } /* 1h 40m */
-.square.lvl-11 { background-color: #0369a1; } /* 1h 50m */
-.square.lvl-12 { background-color: #38bdf8; } /* 2h     */
+/* -------------------------------------------------------------
+   DARK BLUE TO DEEP BLUE (1h 10m to 2h 30m • Lvl 7 - 15)
+   ------------------------------------------------------------- */
+.square.lvl-7  { background-color: #0f172a; } /* 1h 10m - Midnight Blue */
+.square.lvl-8  { background-color: #1e3a8a; } /* 1h 20m - Deep Navy */
+.square.lvl-9  { background-color: #1d4ed8; } /* 1h 30m - Dark Sapphire */
+.square.lvl-10 { background-color: #2563eb; } /* 1h 40m - Royal Blue */
+.square.lvl-11 { background-color: #3b82f6; } /* 1h 50m - Vivid Blue */
+.square.lvl-12 { background-color: #60a5fa; } /* 2h     - Bright Ocean Blue */
+.square.lvl-13 { background-color: #0284c7; } /* 2h 10m - Deep Cyan Blue */
+.square.lvl-14 { background-color: #0369a1; } /* 2h 20m - Azure Blue */
+.square.lvl-15 { background-color: #0ea5e9; } /* 2h 30m - Electric Sky Blue */
 
-/* --- 2 to 3 Hours (10m steps: Royal Blue to Indigo) --- */
-.square.lvl-13 { background-color: #2563eb; } /* 2h 10m */
-.square.lvl-14 { background-color: #3b82f6; } /* 2h 20m */
-.square.lvl-15 { background-color: #60a5fa; } /* 2h 30m */
-.square.lvl-16 { background-color: #4f46e5; } /* 2h 40m */
-.square.lvl-17 { background-color: #6366f1; } /* 2h 50m */
-.square.lvl-18 { background-color: #818cf8; } /* 3h     */
+/* -------------------------------------------------------------
+   PURPLE TO MAGENTA (2h 40m to 4h • Lvl 16 - 24)
+   ------------------------------------------------------------- */
+.square.lvl-16 { background-color: #3b0764; } /* 2h 40m - Dark Plum */
+.square.lvl-17 { background-color: #581c87; } /* 2h 50m - Deep Purple */
+.square.lvl-18 { background-color: #6b21a8; } /* 3h     - Royal Purple */
+.square.lvl-19 { background-color: #7e22ce; } /* 3h 10m - Electric Violet */
+.square.lvl-20 { background-color: #9333ea; } /* 3h 20m - Bright Purple */
+.square.lvl-21 { background-color: #a855f7; } /* 3h 30m - Neon Violet */
+.square.lvl-22 { background-color: #c026d3; } /* 3h 40m - Deep Fuchsia */
+.square.lvl-23 { background-color: #d946ef; } /* 3h 50m - Vibrant Magenta */
+.square.lvl-24 { background-color: #e879f9; } /* 4h     - Neon Pink-Magenta */
 
-/* --- 3 to 4 Hours (10m steps: Purple to Electric Violet) --- */
-.square.lvl-19 { background-color: #7c3aed; } /* 3h 10m */
-.square.lvl-20 { background-color: #8b5cf6; } /* 3h 20m */
-.square.lvl-21 { background-color: #a78bfa; } /* 3h 30m */
-.square.lvl-22 { background-color: #9333ea; } /* 3h 40m */
-.square.lvl-23 { background-color: #a855f7; } /* 3h 50m */
-.square.lvl-24 { background-color: #c084fc; } /* 4h     */
+/* -------------------------------------------------------------
+   ORANGE SHADES (4h 10m to 5h • Lvl 25 - 30)
+   ------------------------------------------------------------- */
+.square.lvl-25 { background-color: #7c2d12; } /* 4h 10m - Burnt Sienna */
+.square.lvl-26 { background-color: #9a3412; } /* 4h 20m - Rust Orange */
+.square.lvl-27 { background-color: #c2410c; } /* 4h 30m - Deep Orange */
+.square.lvl-28 { background-color: #ea580c; } /* 4h 40m - Flame Orange */
+.square.lvl-29 { background-color: #f97316; } /* 4h 50m - Vivid Tangerine */
+.square.lvl-30 { background-color: #fb923c; } /* 5h     - Bright Coral Orange */
 
-/* --- 4 to 5 Hours (10m steps: Fuchsia to Hot Pink) --- */
-.square.lvl-25 { background-color: #c026d3; } /* 4h 10m */
-.square.lvl-26 { background-color: #d946ef; } /* 4h 20m */
-.square.lvl-27 { background-color: #e879f9; } /* 4h 30m */
-.square.lvl-28 { background-color: #db2777; } /* 4h 40m */
-.square.lvl-29 { background-color: #ec4899; } /* 4h 50m */
-.square.lvl-30 { background-color: #f472b6; } /* 5h     */
+/* -------------------------------------------------------------
+   RED SHADES (5h 10m to 6h • Lvl 31 - 36)
+   ------------------------------------------------------------- */
+.square.lvl-31 { background-color: #450a0a; } /* 5h 10m - Dark Maroon */
+.square.lvl-32 { background-color: #7f1d1d; } /* 5h 20m - Dark Crimson */
+.square.lvl-33 { background-color: #991b1b; } /* 5h 30m - Blood Red */
+.square.lvl-34 { background-color: #b91c1c; } /* 5h 40m - Deep Red */
+.square.lvl-35 { background-color: #dc2626; } /* 5h 50m - Fire Red */
+.square.lvl-36 { background-color: #ef4444; } /* 6h     - Bright Scarlet Red */
 
-/* --- 5 to 6 Hours (10m steps: Rose to Scarlet Red) --- */
-.square.lvl-31 { background-color: #e11d48; } /* 5h 10m */
-.square.lvl-32 { background-color: #f43f5e; } /* 5h 20m */
-.square.lvl-33 { background-color: #fb7185; } /* 5h 30m */
-.square.lvl-34 { background-color: #dc2626; } /* 5h 40m */
-.square.lvl-35 { background-color: #ef4444; } /* 5h 50m */
-.square.lvl-36 { background-color: #f87171; } /* 6h     */
+/* -------------------------------------------------------------
+   YELLOW SHADES (6h 15m to 8h • Lvl 37 - 44)
+   ------------------------------------------------------------- */
+.square.lvl-37 { background-color: #713f12; } /* 6h 15m - Dark Ochre */
+.square.lvl-38 { background-color: #854d0e; } /* 6h 30m - Mustard Yellow */
+.square.lvl-39 { background-color: #a16207; } /* 6h 45m - Deep Amber */
+.square.lvl-40 { background-color: #ca8a04; } /* 7h     - Golden Amber */
+.square.lvl-41 { background-color: #d97706; } /* 7h 15m - Warm Sun Yellow */
+.square.lvl-42 { background-color: #eab308; } /* 7h 30m - Bright Yellow */
+.square.lvl-43 { background-color: #facc15; } /* 7h 45m - Neon Sun Yellow */
+.square.lvl-44 { background-color: #fde047; } /* 8h     - Electric Canary Yellow */
 
-/* --- 6 to 8 Hours (15m steps: Flame Orange to Warm Amber) --- */
-.square.lvl-37 { background-color: #ea580c; } /* 6h 15m */
-.square.lvl-38 { background-color: #f97316; } /* 6h 30m */
-.square.lvl-39 { background-color: #fb923c; } /* 6h 45m */
-.square.lvl-40 { background-color: #d97706; } /* 7h     */
-.square.lvl-41 { background-color: #f59e0b; } /* 7h 15m */
-.square.lvl-42 { background-color: #fbbf24; } /* 7h 30m */
-.square.lvl-43 { background-color: #ca8a04; } /* 7h 45m */
-.square.lvl-44 { background-color: #eab308; } /* 8h     */
+/* -------------------------------------------------------------
+   GOLDEN SHADES (8h 15m to 10h • Lvl 45 - 52)
+   ------------------------------------------------------------- */
+.square.lvl-45 { background-color: #855800; } /* 8h 15m - Dark Bronze Gold */
+.square.lvl-46 { background-color: #a36e00; } /* 8h 30m - Antique Gold */
+.square.lvl-47 { background-color: #c48800; } /* 8h 45m - Warm Satin Gold */
+.square.lvl-48 { background-color: #e5a100; } /* 9h     - Rich Metallic Gold */
+.square.lvl-49 { background-color: #ffb703; } /* 9h 15m - Bright Gold */
+.square.lvl-50 { background-color: #ffc300; } /* 9h 30m - Glowing Gold */
+.square.lvl-51 { background-color: #ffd000; } /* 9h 45m - Radiant Sun Gold */
+.square.lvl-52 { background-color: #ffe066; } /* 10h    - Pure High-Shine Gold */
 
-/* --- 8 to 10 Hours (15m steps: Sun Yellow to Lime Green) --- */
-.square.lvl-45 { background-color: #facc15; } /* 8h 15m */
-.square.lvl-46 { background-color: #fde047; } /* 8h 30m */
-.square.lvl-47 { background-color: #a3e635; } /* 8h 45m */
-.square.lvl-48 { background-color: #84cc16; } /* 9h     */
-.square.lvl-49 { background-color: #65a30d; } /* 9h 15m */
-.square.lvl-50 { background-color: #4ade80; } /* 9h 30m */
-.square.lvl-51 { background-color: #22c55e; } /* 9h 45m */
-.square.lvl-52 { background-color: #16a34a; } /* 10h    */
+/* -------------------------------------------------------------
+   GLITTERED & SPARKLING TIERS (11h to 16h • Lvl 53 - 58)
+   ------------------------------------------------------------- */
+.square.lvl-53 {
+  background: linear-gradient(135deg, #a5f3fc, #06b6d4, #e0f2fe);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 8px #67e8f9;
+} /* 11h - Diamond Cyan Sparkle */
 
-/* --- 10 to 16 Hours (1h steps: High-Intensity Neon Pastels) --- */
-.square.lvl-53 { background-color: #67e8f9; box-shadow: 0 0 6px #67e8f9; } /* 11h */
-.square.lvl-54 { background-color: #a5f3fc; box-shadow: 0 0 6px #a5f3fc; } /* 12h */
-.square.lvl-55 { background-color: #f0abfc; box-shadow: 0 0 8px #f0abfc; } /* 13h */
-.square.lvl-56 { background-color: #f472b6; box-shadow: 0 0 8px #f472b6; } /* 14h */
-.square.lvl-57 { background-color: #fecdd3; box-shadow: 0 0 10px #fecdd3; } /* 15h */
-.square.lvl-58 { background-color: #fef08a; box-shadow: 0 0 10px #fef08a; } /* 16h */
+.square.lvl-54 {
+  background: linear-gradient(135deg, #e9d5ff, #c084fc, #f5d0fe);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 8px #c084fc;
+} /* 12h - Holographic Violet Sparkle */
 
-/* --- > 16 Hours (Ultra-Bright Pure White with Dual Neon Glow) --- */
-.square.lvl-59 { 
-  background-color: #ffffff; 
-  box-shadow: 0 0 10px #fde047, 0 0 18px #22d3ee; 
+.square.lvl-55 {
+  background: linear-gradient(135deg, #fbcfe8, #f472b6, #ffe4e6);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 8px #f472b6;
+} /* 13h - Rose Quartz Glitter */
+
+.square.lvl-56 {
+  background: linear-gradient(135deg, #fef08a, #facc15, #ffffff);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 10px #fde047;
+} /* 14h - Golden Starburst Glitter */
+
+.square.lvl-57 {
+  background: linear-gradient(135deg, #ffedd5, #fb923c, #ffffff);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 10px #fb923c;
+} /* 15h - Radiant Prism Sparkle */
+
+.square.lvl-58 {
+  background: linear-gradient(135deg, #ffffff, #fef08a, #67e8f9);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 2s ease infinite;
+  box-shadow: 0 0 12px #ffffff;
+} /* 16h - Iridescent Diamond Glitter */
+
+/* -------------------------------------------------------------
+   ULTRA GLITTER FOCUS (> 16 Hours • Lvl 59)
+   ------------------------------------------------------------- */
+.square.lvl-59 {
+  background: radial-gradient(circle at 30% 30%, #ffffff, #fde047 50%, #38bdf8 100%);
+  background-size: 200% 200%;
+  animation: ultra-diamond-glow 1.5s ease-in-out infinite alternate;
+  box-shadow: 0 0 12px #ffffff, 0 0 20px #fde047;
+  border: 1px solid #ffffff;
+}
+
+/* =============================================================
+   GLITTER & SHIMMER KEYFRAME ANIMATIONS
+   ============================================================= */
+@keyframes glitter-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes ultra-diamond-glow {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 8px #ffffff, 0 0 16px #fde047;
+  }
+  100% {
+    transform: scale(1.1);
+    box-shadow: 0 0 14px #ffffff, 0 0 24px #38bdf8, 0 0 30px #e879f9;
+  }
+}
+
+/* Anchored Floating Tooltip Popup */
+.heatmap-tooltip {
+  position: fixed;
+  background: #090d16;
+  color: #f8fafc;
+  border: 1px solid #3b82f6;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 99999;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 12px rgba(59, 130, 246, 0.4);
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.heatmap-tooltip strong {
+  color: #38bdf8;
 }
 .heatmap-legend {
   display: flex;

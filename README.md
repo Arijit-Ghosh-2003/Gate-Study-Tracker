@@ -84,3 +84,8 @@ pm2 save
 | `GET` | `/api/analytics/summary` | Fetches daily, weekly, and monthly study time and break counts |
 | `GET` | `/api/analytics/heatmap` | Aggregates past 365-day study data for the contribution grid |
 | `GET` | `/api/history` | Fetches recent study session logs and granular pause timestamps |
+
+
+--convert all code into codebase.txt
+
+Get-ChildItem -Recurse -File -Include *.js,*.html,*.css,*.sql | Where-Object { $_.FullName -notmatch 'node_modules' } | ForEach-Object { "`n`n--- [FILE: $($_.Name)] ---`n`n" + (Get-Content $_.FullName -Raw) } | Set-Content codebase.txt

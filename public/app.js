@@ -516,42 +516,31 @@ function formatHoursMins(totalSeconds) {
 // 6. Heatmap
 // REPLACE getHeatmapLevel(minutes) in public/app.js WITH THIS:
 function getHeatmapLevel(minutes) {
-  if (minutes <= 0) return 'lvl-0';       // 0 min
+  if (minutes <= 0) return 'lvl-0';
 
-  // 0 - 1 Hour (Every 10 mins)
-  if (minutes <= 10) return 'lvl-1';     // 1–10m
-  if (minutes <= 20) return 'lvl-2';     // 11–20m
-  if (minutes <= 30) return 'lvl-3';     // 21–30m
-  if (minutes <= 40) return 'lvl-4';     // 31–40m
-  if (minutes <= 50) return 'lvl-5';     // 41–50m
-  if (minutes <= 60) return 'lvl-6';     // 51–60m (1h)
+  // 1. 0 to 6 Hours (1 to 360 mins): Changes every 10 mins -> lvl-1 to lvl-36
+  if (minutes <= 360) {
+    const level = Math.ceil(minutes / 10);
+    return `lvl-${level}`;
+  }
 
-  // 1 - 2 Hours (Every 15 mins)
-  if (minutes <= 75) return 'lvl-7';     // 1h 15m
-  if (minutes <= 90) return 'lvl-8';     // 1h 30m
-  if (minutes <= 105) return 'lvl-9';    // 1h 45m
-  if (minutes <= 120) return 'lvl-10';   // 2h
+  // 2. 6 to 10 Hours (361 to 600 mins): Changes every 15 mins -> lvl-37 to lvl-52
+  if (minutes <= 600) {
+    const extraMins = minutes - 360;
+    const level = 36 + Math.ceil(extraMins / 15);
+    return `lvl-${level}`;
+  }
 
-  // 2 - 6 Hours (Every 30 mins)
-  if (minutes <= 150) return 'lvl-11';   // 2.5h
-  if (minutes <= 180) return 'lvl-12';   // 3h
-  if (minutes <= 210) return 'lvl-13';   // 3.5h
-  if (minutes <= 240) return 'lvl-14';   // 4h
-  if (minutes <= 270) return 'lvl-15';   // 4.5h
-  if (minutes <= 300) return 'lvl-16';   // 5h
-  if (minutes <= 330) return 'lvl-17';   // 5.5h
-  if (minutes <= 360) return 'lvl-18';   // 6h
+  // 3. 10 to 16 Hours (601 to 960 mins): Changes every 1 Hour (60 mins) -> lvl-53 to lvl-58
+  if (minutes <= 960) {
+    const extraMins = minutes - 600;
+    const level = 52 + Math.ceil(extraMins / 60);
+    return `lvl-${level}`;
+  }
 
-  // > 6 Hours (Every 1 hour)
-  if (minutes <= 420) return 'lvl-19';   // 7h
-  if (minutes <= 480) return 'lvl-20';   // 8h
-  if (minutes <= 540) return 'lvl-21';   // 9h
-  if (minutes <= 600) return 'lvl-22';   // 10h
-  if (minutes <= 660) return 'lvl-23';   // 11h
-  if (minutes <= 720) return 'lvl-24';   // 12h
-  return 'lvl-25';                       // > 12h
+  // 4. > 16 Hours (> 960 mins) -> lvl-59
+  return 'lvl-59';
 }
-
 async function loadHeatmap() {
   const res = await fetch('/api/analytics/heatmap');
   const { data } = await res.json();

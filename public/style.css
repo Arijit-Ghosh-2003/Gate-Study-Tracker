@@ -276,129 +276,149 @@ input[type="text"], input[type="number"], select {
 
 /* AFTER (What to replace it with) */
 /* 3-Month Heatmap Container with Flex Wrapping */
+/* =============================================================
+   ENLARGED HEATMAP GRID & MONTH BLOCKS
+   ============================================================= */
 .heatmap-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 20px;
   justify-content: flex-start;
-  padding: 12px 0;
+  padding: 16px 0;
 }
 
 .month-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   background: #0f172a;
-  padding: 12px;
-  border-radius: 10px;
+  padding: 16px;
+  border-radius: 12px;
   border: 1px solid var(--border-color);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.4);
 }
 
 .month-title {
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: #38bdf8;
   text-align: center;
   letter-spacing: 0.5px;
 }
 
+/* Increased tile dimensions from 14px to 18px and gap to 5px */
 .days-grid {
   display: grid;
-  grid-template-rows: repeat(7, 14px);
+  grid-template-rows: repeat(7, 18px);
   grid-auto-flow: column;
-  grid-auto-columns: 14px;
-  gap: 4px;
+  grid-auto-columns: 18px;
+  gap: 5px;
 }
 
-/* Day Tile Styles */
-/* Base Square Tile Refinement for Crisp Borders */
 .square {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .square:hover {
-  transform: scale(1.35);
+  transform: scale(1.4);
   border-color: #ffffff;
   z-index: 10;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
-}
-
-/* LeetCode-Style Floating Popup Tooltip */
-.heatmap-tooltip {
-  position: absolute;
-  background: #090d16;
-  color: #f8fafc;
-  border: 1px solid #3b82f6;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  pointer-events: none;
-  z-index: 9999;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 10px rgba(59, 130, 246, 0.3);
-  white-space: nowrap;
-  transform: translate(-50%, -120%);
-  transition: opacity 0.1s ease, transform 0.1s ease;
-}
-
-.heatmap-tooltip strong {
-  color: #38bdf8;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
 }
 
 /* =============================================================
-   HIGH-CONTRAST 26-TIER HEATMAP GRADIENT PALETTE
-   ============================================================= */
-
-/* =============================================================
-   HIGH-CONTRAST 26-TIER HEATMAP GRADIENT PALETTE
+   59-TIER PROGRESSIVE HIGH-CONTRAST PALETTE (0 to 16+ Hours)
    ============================================================= */
 
 /* 0m Baseline */
 .square.lvl-0  { background-color: #1e293b; border: 1px solid #334155; }
 
-/* -------------------------------------------------------------
-   LEVELS 1 to 10: HIGH-CONTRAST PROGRESSION (0 - 2 Hours)
-   ------------------------------------------------------------- */
-.square.lvl-1  { background-color: #064e3b; } /* 10m  - Dark Forest Green */
-.square.lvl-2  { background-color: #047857; } /* 20m  - Deep Emerald Green */
-.square.lvl-3  { background-color: #059669; } /* 30m  - Rich Jade Green */
-.square.lvl-4  { background-color: #10b981; } /* 40m  - Vibrant Emerald */
-.square.lvl-5  { background-color: #06b6d4; } /* 50m  - Electric Cyan */
-.square.lvl-6  { background-color: #38bdf8; } /* 1h   - Vibrant Sky Blue */
-.square.lvl-7  { background-color: #0284c7; } /* 1h15m - Deep Ocean Blue */
-.square.lvl-8  { background-color: #2563eb; } /* 1h30m - Royal Blue */
-.square.lvl-9  { background-color: #4f46e5; } /* 1h45m - Indigo */
-.square.lvl-10 { background-color: #7c3aed; } /* 2h   - Electric Violet */
+/* --- 0 to 1 Hour (10m steps: Emerald to Bright Green) --- */
+.square.lvl-1  { background-color: #064e3b; } /* 10m  */
+.square.lvl-2  { background-color: #046c4e; } /* 20m  */
+.square.lvl-3  { background-color: #047857; } /* 30m  */
+.square.lvl-4  { background-color: #059669; } /* 40m  */
+.square.lvl-5  { background-color: #10b981; } /* 50m  */
+.square.lvl-6  { background-color: #34d399; } /* 1h   */
 
-/* -------------------------------------------------------------
-   LEVELS 11 to 25: EXTENDED DURATION (2+ Hours)
-   ------------------------------------------------------------- */
-.square.lvl-11 { background-color: #9333ea; } /* 2.5h - Bright Purple */
-.square.lvl-12 { background-color: #c026d3; } /* 3h   - Deep Fuchsia */
-.square.lvl-13 { background-color: #d946ef; } /* 3.5h - Magenta */
-.square.lvl-14 { background-color: #f43f5e; } /* 4h   - Neon Rose */
-.square.lvl-15 { background-color: #e11d48; } /* 4.5h - Crimson */
-.square.lvl-16 { background-color: #f97316; } /* 5h   - Flame Orange */
-.square.lvl-17 { background-color: #f59e0b; } /* 5.5h - Amber */
-.square.lvl-18 { background-color: #eab308; } /* 6h   - Warm Yellow */
+/* --- 1 to 2 Hours (10m steps: Teal to Sky Blue) --- */
+.square.lvl-7  { background-color: #0891b2; } /* 1h 10m */
+.square.lvl-8  { background-color: #06b6d4; } /* 1h 20m */
+.square.lvl-9  { background-color: #22d3ee; } /* 1h 30m */
+.square.lvl-10 { background-color: #0284c7; } /* 1h 40m */
+.square.lvl-11 { background-color: #0369a1; } /* 1h 50m */
+.square.lvl-12 { background-color: #38bdf8; } /* 2h     */
 
-/* > 6 Hours: High Intensity Spectrum */
-.square.lvl-19 { background-color: #facc15; } /* 7h */
-.square.lvl-20 { background-color: #fef08a; } /* 8h */
-.square.lvl-21 { background-color: #ff7700; } /* 9h */
-.square.lvl-22 { background-color: #ff4400; } /* 10h */
-.square.lvl-23 { background-color: #ff0055; } /* 11h */
-.square.lvl-24 { background-color: #ff00aa; } /* 12h */
-.square.lvl-25 { 
+/* --- 2 to 3 Hours (10m steps: Royal Blue to Indigo) --- */
+.square.lvl-13 { background-color: #2563eb; } /* 2h 10m */
+.square.lvl-14 { background-color: #3b82f6; } /* 2h 20m */
+.square.lvl-15 { background-color: #60a5fa; } /* 2h 30m */
+.square.lvl-16 { background-color: #4f46e5; } /* 2h 40m */
+.square.lvl-17 { background-color: #6366f1; } /* 2h 50m */
+.square.lvl-18 { background-color: #818cf8; } /* 3h     */
+
+/* --- 3 to 4 Hours (10m steps: Purple to Electric Violet) --- */
+.square.lvl-19 { background-color: #7c3aed; } /* 3h 10m */
+.square.lvl-20 { background-color: #8b5cf6; } /* 3h 20m */
+.square.lvl-21 { background-color: #a78bfa; } /* 3h 30m */
+.square.lvl-22 { background-color: #9333ea; } /* 3h 40m */
+.square.lvl-23 { background-color: #a855f7; } /* 3h 50m */
+.square.lvl-24 { background-color: #c084fc; } /* 4h     */
+
+/* --- 4 to 5 Hours (10m steps: Fuchsia to Hot Pink) --- */
+.square.lvl-25 { background-color: #c026d3; } /* 4h 10m */
+.square.lvl-26 { background-color: #d946ef; } /* 4h 20m */
+.square.lvl-27 { background-color: #e879f9; } /* 4h 30m */
+.square.lvl-28 { background-color: #db2777; } /* 4h 40m */
+.square.lvl-29 { background-color: #ec4899; } /* 4h 50m */
+.square.lvl-30 { background-color: #f472b6; } /* 5h     */
+
+/* --- 5 to 6 Hours (10m steps: Rose to Scarlet Red) --- */
+.square.lvl-31 { background-color: #e11d48; } /* 5h 10m */
+.square.lvl-32 { background-color: #f43f5e; } /* 5h 20m */
+.square.lvl-33 { background-color: #fb7185; } /* 5h 30m */
+.square.lvl-34 { background-color: #dc2626; } /* 5h 40m */
+.square.lvl-35 { background-color: #ef4444; } /* 5h 50m */
+.square.lvl-36 { background-color: #f87171; } /* 6h     */
+
+/* --- 6 to 8 Hours (15m steps: Flame Orange to Warm Amber) --- */
+.square.lvl-37 { background-color: #ea580c; } /* 6h 15m */
+.square.lvl-38 { background-color: #f97316; } /* 6h 30m */
+.square.lvl-39 { background-color: #fb923c; } /* 6h 45m */
+.square.lvl-40 { background-color: #d97706; } /* 7h     */
+.square.lvl-41 { background-color: #f59e0b; } /* 7h 15m */
+.square.lvl-42 { background-color: #fbbf24; } /* 7h 30m */
+.square.lvl-43 { background-color: #ca8a04; } /* 7h 45m */
+.square.lvl-44 { background-color: #eab308; } /* 8h     */
+
+/* --- 8 to 10 Hours (15m steps: Sun Yellow to Lime Green) --- */
+.square.lvl-45 { background-color: #facc15; } /* 8h 15m */
+.square.lvl-46 { background-color: #fde047; } /* 8h 30m */
+.square.lvl-47 { background-color: #a3e635; } /* 8h 45m */
+.square.lvl-48 { background-color: #84cc16; } /* 9h     */
+.square.lvl-49 { background-color: #65a30d; } /* 9h 15m */
+.square.lvl-50 { background-color: #4ade80; } /* 9h 30m */
+.square.lvl-51 { background-color: #22c55e; } /* 9h 45m */
+.square.lvl-52 { background-color: #16a34a; } /* 10h    */
+
+/* --- 10 to 16 Hours (1h steps: High-Intensity Neon Pastels) --- */
+.square.lvl-53 { background-color: #67e8f9; box-shadow: 0 0 6px #67e8f9; } /* 11h */
+.square.lvl-54 { background-color: #a5f3fc; box-shadow: 0 0 6px #a5f3fc; } /* 12h */
+.square.lvl-55 { background-color: #f0abfc; box-shadow: 0 0 8px #f0abfc; } /* 13h */
+.square.lvl-56 { background-color: #f472b6; box-shadow: 0 0 8px #f472b6; } /* 14h */
+.square.lvl-57 { background-color: #fecdd3; box-shadow: 0 0 10px #fecdd3; } /* 15h */
+.square.lvl-58 { background-color: #fef08a; box-shadow: 0 0 10px #fef08a; } /* 16h */
+
+/* --- > 16 Hours (Ultra-Bright Pure White with Dual Neon Glow) --- */
+.square.lvl-59 { 
   background-color: #ffffff; 
-  box-shadow: 0 0 8px #fde047; /* Neon Gold Glow */
-} /* > 12h */
+  box-shadow: 0 0 10px #fde047, 0 0 18px #22d3ee; 
+}
 .heatmap-legend {
   display: flex;
   align-items: center;

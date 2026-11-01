@@ -286,7 +286,7 @@ app.get('/api/analytics/heatmap', async (req, res) => {
   try {
     const [rows] = await db.query(`
       SELECT 
-        DATE_FORMAT(CONVERT_TZ(start_time, '+00:00', '+05:30'), '%Y-%m-%d') as date,
+        DATE_FORMAT(CONVERT_TZ(start_time, '+00:00', '+05:30'), '%Y-%m-%d') AS date,
         SUM(
           CASE 
             WHEN status = 'active' THEN 
@@ -296,7 +296,7 @@ app.get('/api/analytics/heatmap', async (req, res) => {
               ))
             ELSE total_active_seconds 
           END
-        ) as total_seconds
+        ) AS total_seconds
       FROM study_sessions 
       WHERE start_time >= DATE_SUB(NOW(), INTERVAL 365 DAY)
       GROUP BY DATE_FORMAT(CONVERT_TZ(start_time, '+00:00', '+05:30'), '%Y-%m-%d') 

@@ -231,7 +231,7 @@ app.post('/api/session/end', async (req, res) => {
 
 app.get('/api/analytics/summary', async (req, res) => {
   try {
-    // 🟢 Converts start_time & current server time to IST (+05:30) for exact midnight IST daily resets
+    // 1. TODAY (Midnight IST Reset)
     const [dailyStudy] = await db.query(`
       SELECT SUM(total_active_seconds) as total 
       FROM study_sessions 
@@ -252,16 +252,22 @@ app.get('/api/analytics/summary', async (req, res) => {
         AND (pause_type IS NULL OR pause_type != 'long_term')
     `);
 
+    // 2. THIS CALENDAR WEEK (Starts Sunday at 00:00 IST)
+    // DAYOFWEEK() returns 1 for Sunday, 2 for Monday... 7 for Saturday
     const [weeklyStudy] = await db.query(`
       SELECT SUM(total_active_seconds) as total 
       FROM study_sessions 
-      WHERE start_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+      WHERE CONVERT_TZ(start_time, '+00:00', '+05:30') >= DATE_SUB(
+        DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30')), 
+        INTERVAL (DAYOFWEEK(CONVERT_TZ(NOW(), '+00:00', '+05:30')) - 1) DAY
+      )
     `);
 
+    // 3. THIS GREGORIAN MONTH (Current Month e.g., November 2026)
     const [monthlyStudy] = await db.query(`
       SELECT SUM(total_active_seconds) as total 
       FROM study_sessions 
-      WHERE start_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      WHERE DATE_FORMAT(CONVERT_TZ(start_time, '+00:00', '+05:30'), '%Y-%m') = DATE_FORMAT(CONVERT_TZ(NOW(), '+00:00', '+05:30'), '%Y-%m')
     `);
 
     res.json({
@@ -296,11 +302,14 @@ app.get('/api/history', async (req, res) => {
     const scope = req.query.scope || 'all';
     let whereClause = '';
 
+    // Filter for current calendar week starting from Sunday
     if (scope === 'week') {
-      whereClause = `WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)`;
+      whereClause = `WHERE CONVERT_TZ(start_time, '+00:00', '+05:30') >= DATE_SUB(
+        DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30')), 
+        INTERVAL (DAYOFWEEK(CONVERT_TZ(NOW(), '+00:00', '+05:30')) - 1) DAY
+      )`;
     }
 
-    // 🟢 DATE_FORMAT appends 'Z' to explicitly flag the stored string as UTC
     const [sessions] = await db.query(
       `SELECT s.*, DATE_FORMAT(s.start_time, '%Y-%m-%dT%H:%i:%s.000Z') AS start_time 
        FROM study_sessions s ${whereClause} 

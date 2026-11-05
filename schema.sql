@@ -51,18 +51,20 @@ update study_sessions
 set status='long_interruption'
 where id=15;
 
--- Delete from study_sessions
--- where id=14;
+Delete from study_sessions
+where id=40;
 
--- SELECT 
---     table_name AS `Table`,
---     table_rows AS `Approximate Rows`,
---     ROUND(data_length / 1024 / 1024, 2) AS `Data Size (MB)`,
---     ROUND(index_length / 1024 / 1024, 2) AS `Index Size (MB)`,
---     ROUND((data_length + index_length) / 1024 / 1024, 2) AS `Total Storage (MB)`,
---     ROUND((data_length + index_length) / IFNULL(NULLIF(table_rows, 0), 1), 0) AS `Avg Bytes / Row`
--- FROM information_schema.tables
--- WHERE table_schema = 'study_tracker';
+SELECT 
+    table_name AS `Table`,
+    table_rows AS `Approximate Rows`,
+    ROUND(data_length / 1024 / 1024, 2) AS `Data Size (MB)`,
+    ROUND(index_length / 1024 / 1024, 2) AS `Index Size (MB)`,
+    ROUND((data_length + index_length) / 1024 / 1024, 2) AS `Total Storage (MB)`,
+    ROUND((data_length + index_length) / IFNULL(NULLIF(table_rows, 0), 1), 0) AS `Avg Bytes / Row`
+FROM information_schema.tables
+WHERE table_schema = 'study_tracker';
+
+ANALYZE TABLE pause_intervals;
 
 UPDATE study_sessions 
 SET 

@@ -688,18 +688,34 @@ async function loadHistory() {
     }
 
     let pauseHtml = '<span style="color: #64748b;">No breaks</span>';
-    if (item.pauses && item.pauses.length > 0) {
-      const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
-      if (shortPauses.length > 0) {
-        pauseHtml = '<ul class="pause-list">';
-        shortPauses.forEach((p, idx) => {
-          const pStart = new Date(p.pause_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const pEnd = p.pause_end ? new Date(p.pause_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ongoing';
-          pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
-        });
-        pauseHtml += '</ul>';
-      }
-    }
+        if (item.pauses && item.pauses.length > 0) {
+          const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
+          if (shortPauses.length > 0) {
+            pauseHtml = '<ul class="pause-list">';
+            shortPauses.forEach((p, idx) => {
+              // Convert UTC string to IST Date object
+              const pStartObj = new Date(
+                typeof p.pause_start === 'string' && !p.pause_start.endsWith('Z')
+                  ? p.pause_start.replace(' ', 'T') + 'Z'
+                  : p.pause_start
+              );
+              const pStart = pStartObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+              let pEnd = 'Ongoing';
+              if (p.pause_end) {
+                const pEndObj = new Date(
+                  typeof p.pause_end === 'string' && !p.pause_end.endsWith('Z')
+                    ? p.pause_end.replace(' ', 'T') + 'Z'
+                    : p.pause_end
+                );
+                pEnd = pEndObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              }
+
+              pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
+            });
+            pauseHtml += '</ul>';
+          }
+        }
 
     const modeBadge = `<span class="badge" style="background: ${item.session_mode === 'practice_exam' ? '#8b5cf6' : '#3b82f6'}">${item.session_mode.toUpperCase().replace('_', ' ')}</span>`;
 

@@ -344,37 +344,37 @@ input[type="text"], input[type="number"], select {
    DEEP GREEN TO BRIGHT GREEN (10m to 1h • Lvl 1 - 6)
    ------------------------------------------------------------- */
 .square.lvl-1  { background-color: #022c22; } /* 10m  - Deepest Forest Green */
-.square.lvl-2  { background-color: #064e3b; } /* 20m  - Dark Emerald */
-.square.lvl-3  { background-color: #047857; } /* 30m  - Medium Jade */
-.square.lvl-4  { background-color: #059669; } /* 40m  - Rich Green */
-.square.lvl-5  { background-color: #10b981; } /* 50m  - Vibrant Emerald */
-.square.lvl-6  { background-color: #34d399; } /* 1h   - Bright Mint Green */
+.square.lvl-2  { background-color: #067029; } /* 20m  - Dark Emerald */
+.square.lvl-3  { background-color: #1b9c2c; } /* 30m  - Medium Jade */
+.square.lvl-4  { background-color: #265b4a; } /* 40m  - Rich Green */
+.square.lvl-5  { background-color: #1c9b71; } /* 50m  - Vibrant Emerald */
+.square.lvl-6  { background-color: #16f2a1; } /* 1h   - Bright Mint Green */
 
 /* -------------------------------------------------------------
    DARK BLUE TO DEEP BLUE (1h 10m to 2h 30m • Lvl 7 - 15)
    ------------------------------------------------------------- */
-.square.lvl-7  { background-color: #0f172a; } /* 1h 10m - Midnight Blue */
-.square.lvl-8  { background-color: #1e3a8a; } /* 1h 20m - Deep Navy */
-.square.lvl-9  { background-color: #1d4ed8; } /* 1h 30m - Dark Sapphire */
-.square.lvl-10 { background-color: #2563eb; } /* 1h 40m - Royal Blue */
-.square.lvl-11 { background-color: #3b82f6; } /* 1h 50m - Vivid Blue */
+.square.lvl-7  { background-color: #1a0071; } /* 1h 10m - Midnight Blue */
+.square.lvl-8  { background-color: #445ea5; } /* 1h 20m - Deep Navy */
+.square.lvl-9  { background-color: #0c6ea7; } /* 1h 30m - Dark Sapphire */
+.square.lvl-10 { background-color: #583ce2; } /* 1h 40m - Royal Blue */
+.square.lvl-11 { background-color: #064ec2; } /* 1h 50m - Vivid Blue */
 .square.lvl-12 { background-color: #60a5fa; } /* 2h     - Bright Ocean Blue */
-.square.lvl-13 { background-color: #0284c7; } /* 2h 10m - Deep Cyan Blue */
-.square.lvl-14 { background-color: #0369a1; } /* 2h 20m - Azure Blue */
+.square.lvl-13 { background-color: #2339b8; } /* 2h 10m - Deep Cyan Blue */
+.square.lvl-14 { background-color: #0b0d52; } /* 2h 20m - Azure Blue */
 .square.lvl-15 { background-color: #0ea5e9; } /* 2h 30m - Electric Sky Blue */
 
 /* -------------------------------------------------------------
    PURPLE TO MAGENTA (2h 40m to 4h • Lvl 16 - 24)
    ------------------------------------------------------------- */
-.square.lvl-16 { background-color: #3b0764; } /* 2h 40m - Dark Plum */
-.square.lvl-17 { background-color: #581c87; } /* 2h 50m - Deep Purple */
-.square.lvl-18 { background-color: #6b21a8; } /* 3h     - Royal Purple */
-.square.lvl-19 { background-color: #7e22ce; } /* 3h 10m - Electric Violet */
-.square.lvl-20 { background-color: #9333ea; } /* 3h 20m - Bright Purple */
-.square.lvl-21 { background-color: #a855f7; } /* 3h 30m - Neon Violet */
+.square.lvl-16 { background-color: #3d0369; } /* 2h 40m - Dark Plum */
+.square.lvl-17 { background-color: #8706ea; } /* 2h 50m - Deep Purple */
+.square.lvl-18 { background-color: #8251ff; } /* 3h     - Royal Purple */
+.square.lvl-19 { background-color: #5b20ff; } /* 3h 10m - Electric Violet */
+.square.lvl-20 { background-color: #570798; } /* 3h 20m - Bright Purple */
+.square.lvl-21 { background-color: #a955f7c6; } /* 3h 30m - Neon Violet */
 .square.lvl-22 { background-color: #c026d3; } /* 3h 40m - Deep Fuchsia */
-.square.lvl-23 { background-color: #d946ef; } /* 3h 50m - Vibrant Magenta */
-.square.lvl-24 { background-color: #e879f9; } /* 4h     - Neon Pink-Magenta */
+.square.lvl-23 { background-color: #9b18b0; } /* 3h 50m - Vibrant Magenta */
+.square.lvl-24 { background-color: #de1386; } /* 4h     - Neon Pink-Magenta */
 
 /* -------------------------------------------------------------
    ORANGE SHADES (4h 10m to 5h • Lvl 25 - 30)

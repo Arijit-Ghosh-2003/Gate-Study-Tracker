@@ -354,9 +354,9 @@ input[type="text"], input[type="number"], select {
    DARK BLUE TO DEEP BLUE (1h 10m to 2h 30m • Lvl 7 - 15)
    ------------------------------------------------------------- */
 .square.lvl-7  { background-color: #1a0071; } /* 1h 10m - Midnight Blue */
-.square.lvl-8  { background-color: #445ea5; } /* 1h 20m - Deep Navy */
-.square.lvl-9  { background-color: #0c6ea7; } /* 1h 30m - Dark Sapphire */
-.square.lvl-10 { background-color: #583ce2; } /* 1h 40m - Royal Blue */
+.square.lvl-8  { background-color: #1b2748; } /* 1h 20m - Deep Navy */
+.square.lvl-9  { background-color: #0878b9; } /* 1h 30m - Dark Sapphire */
+.square.lvl-10 { background-color: #9682f9; } /* 1h 40m - Royal Blue */
 .square.lvl-11 { background-color: #064ec2; } /* 1h 50m - Vivid Blue */
 .square.lvl-12 { background-color: #60a5fa; } /* 2h     - Bright Ocean Blue */
 .square.lvl-13 { background-color: #2339b8; } /* 2h 10m - Deep Cyan Blue */

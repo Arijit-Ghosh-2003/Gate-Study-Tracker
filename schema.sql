@@ -110,3 +110,9 @@ SET total_active_seconds = GREATEST(0, (
   )
 ))
 WHERE s.id = 16;
+
+UPDATE study_sessions 
+SET total_active_seconds = 2700 
+WHERE id = (SELECT max_id FROM (SELECT MAX(id) AS max_id FROM study_sessions) t); 
+
+SELECT id, total_active_seconds, status FROM study_sessions ORDER BY id DESC LIMIT 1;

@@ -333,51 +333,44 @@ input[type="text"], input[type="number"], select {
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
 }
 
-/* =============================================================
-   59-TIER HEATMAP PALETTE (DEEP GREEN -> GLITTER)
-   ============================================================= */
-
-/* 0m Baseline */
-.square.lvl-0  { background-color: #1e293b; border: 1px solid #334155; }
-
 /* -------------------------------------------------------------
-   DEEP GREEN TO BRIGHT GREEN (10m to 1h • Lvl 1 - 6)
+   GREEN FAMILY (10m to 1h • Lvl 1 - 6)
    ------------------------------------------------------------- */
-.square.lvl-1  { background-color: #022c22; } /* 10m  - Deepest Forest Green */
-.square.lvl-2  { background-color: #067029; } /* 20m  - Dark Emerald */
-.square.lvl-3  { background-color: #1b9c2c; } /* 30m  - Medium Jade */
-.square.lvl-4  { background-color: #265b4a; } /* 40m  - Rich Green */
-.square.lvl-5  { background-color: #1c9b71; } /* 50m  - Vibrant Emerald */
-.square.lvl-6  { background-color: #16f2a1; } /* 1h   - Bright Mint Green */
+.square.lvl-1  { background-color: #064e3b; } /* 10m  - Dark Pine */
+.square.lvl-2  { background-color: #16a34a; } /* 20m  - Green */
+.square.lvl-3  { background-color: #84cc16; } /* 30m  - Lime */
+.square.lvl-4  { background-color: #0d9488; } /* 40m  - Teal */
+.square.lvl-5  { background-color: #34d399; } /* 50m  - Emerald */
+.square.lvl-6  { background-color: #bbf7d0; } /* 1h   - Pale Mint */
 
 /* -------------------------------------------------------------
-   DARK BLUE TO DEEP BLUE (1h 10m to 2h 30m • Lvl 7 - 15)
+   BLUE FAMILY (1h 10m to 2h 30m • Lvl 7 - 15)
    ------------------------------------------------------------- */
-.square.lvl-7  { background-color: #1a0071; } /* 1h 10m - Midnight Blue */
-.square.lvl-8  { background-color: #1b2748; } /* 1h 20m - Deep Navy */
-.square.lvl-9  { background-color: #0878b9; } /* 1h 30m - Dark Sapphire */
-.square.lvl-10 { background-color: #9682f9; } /* 1h 40m - Royal Blue */
-.square.lvl-11 { background-color: #064ec2; } /* 1h 50m - Vivid Blue */
-.square.lvl-12 { background-color: #60a5fa; } /* 2h     - Bright Ocean Blue */
-.square.lvl-13 { background-color: #2339b8; } /* 2h 10m - Deep Cyan Blue */
-.square.lvl-14 { background-color: #0b0d52; } /* 2h 20m - Azure Blue */
-.square.lvl-15 { background-color: #0ea5e9; } /* 2h 30m - Electric Sky Blue */
+.square.lvl-7  { background-color: #172554; } /* 1h 10m - Midnight Navy */
+.square.lvl-8  { background-color: #1d4ed8; } /* 1h 20m - Royal Blue */
+.square.lvl-9  { background-color: #0284c7; } /* 1h 30m - Sapphire */
+.square.lvl-10 { background-color: #38bdf8; } /* 1h 40m - Sky Blue */
+.square.lvl-11 { background-color: #155e75; } /* 1h 50m - Deep Teal Blue */
+.square.lvl-12 { background-color: #64748b; } /* 2h     - Steel Blue-Gray */
+.square.lvl-13 { background-color: #4338ca; } /* 2h 10m - Indigo */
+.square.lvl-14 { background-color: #818cf8; } /* 2h 20m - Periwinkle */
+.square.lvl-15 { background-color: #bae6fd; } /* 2h 30m - Ice Blue */
 
 /* -------------------------------------------------------------
-   PURPLE TO MAGENTA (2h 40m to 4h • Lvl 16 - 24)
+   VIOLET TO ROSE (2h 40m to 4h • Lvl 16 - 24)
    ------------------------------------------------------------- */
-.square.lvl-16 { background-color: #3d0369; } /* 2h 40m - Dark Plum */
-.square.lvl-17 { background-color: #8706ea; } /* 2h 50m - Deep Purple */
-.square.lvl-18 { background-color: #8251ff; } /* 3h     - Royal Purple */
-.square.lvl-19 { background-color: #5b20ff; } /* 3h 10m - Electric Violet */
-.square.lvl-20 { background-color: #570798; } /* 3h 20m - Bright Purple */
-.square.lvl-21 { background-color: #a955f7c6; } /* 3h 30m - Neon Violet */
-.square.lvl-22 { background-color: #c026d3; } /* 3h 40m - Deep Fuchsia */
-.square.lvl-23 { background-color: #9b18b0; } /* 3h 50m - Vibrant Magenta */
-.square.lvl-24 { background-color: #de1386; } /* 4h     - Neon Pink-Magenta */
+.square.lvl-16 { background-color: #2e1065; } /* 2h 40m - Midnight Violet */
+.square.lvl-17 { background-color: #7c3aed; } /* 2h 50m - Violet */
+.square.lvl-18 { background-color: #c4b5fd; } /* 3h     - Lavender */
+.square.lvl-19 { background-color: #86198f; } /* 3h 10m - Dark Magenta */
+.square.lvl-20 { background-color: #e879f9; } /* 3h 20m - Fuchsia */
+.square.lvl-21 { background-color: #f5d0fe; } /* 3h 30m - Pale Orchid */
+.square.lvl-22 { background-color: #fda4af; } /* 3h 40m - Light Rose */
+.square.lvl-23 { background-color: #9f1239; } /* 3h 50m - Dark Crimson */
+.square.lvl-24 { background-color: #db2777; } /* 4h     - Vivid Deep Pink */
 
 /* -------------------------------------------------------------
-   ORANGE SHADES (4h 10m to 5h • Lvl 25 - 30)
+   ORANGE START (4h 10m • Lvl 25)
    ------------------------------------------------------------- */
 .square.lvl-25 { background-color: #7c2d12; } /* 4h 10m - Burnt Sienna */
 .square.lvl-26 { background-color: #9a3412; } /* 4h 20m - Rust Orange */

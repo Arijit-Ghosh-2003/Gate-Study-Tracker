@@ -7,7 +7,7 @@ const pool = mysql.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  timezone: '+05:30',
+  timezone: '+00:00',
   dateStrings: true,
   ssl: {
     minVersion: 'TLSv1.2',
@@ -20,7 +20,7 @@ const pool = mysql.createPool({
 
 // Ensure every new TiDB session evaluates NOW(), CURDATE(), and TIMESTAMP columns in IST
 pool.on('connection', (conn) => {
-  conn.query("SET time_zone = '+05:30';");
+  conn.query("SET time_zone = '+00:00';");
 });
 
 module.exports = pool;

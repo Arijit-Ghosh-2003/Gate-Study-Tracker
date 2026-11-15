@@ -414,3 +414,8 @@ app.get('/api/debug-time', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+app.listen(PORT, () => {
+  console.log(`Mission GATE 2027 Tracker running at http://localhost:${PORT}`);
+});

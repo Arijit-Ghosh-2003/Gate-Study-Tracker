@@ -149,14 +149,20 @@ app.post('/api/session/start', async (req, res) => {
   try {
     await db.query(`UPDATE study_sessions SET status = 'completed', end_time = NOW() WHERE status IN ('active', 'paused')`);
 
-    const [result] = await db.query(
+    // Get ID from the last started session
+    const [lastSession] = await db.query(
+      `SELECT id FROM study_sessions ORDER BY start_time DESC, id DESC LIMIT 1`
+    );
+    const nextId = lastSession.length > 0 ? lastSession[0].id + 1 : 1;
+
+    await db.query(
       `INSERT INTO study_sessions 
-       (session_mode, subject, topic, platform, target_goal, study_type, target_duration_seconds, start_time, last_heartbeat, status, notified_50, notified_75, notified_100) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 'active', 0, 0, 0)`,
-      [session_mode || 'study', subject.trim(), topic.trim(), platform.trim(), target_goal.trim(), study_type.trim(), targetSecs]
+       (id, session_mode, subject, topic, platform, target_goal, study_type, target_duration_seconds, start_time, last_heartbeat, status, notified_50, notified_75, notified_100) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 'active', 0, 0, 0)`,
+      [nextId, session_mode || 'study', subject.trim(), topic.trim(), platform.trim(), target_goal.trim(), study_type.trim(), targetSecs]
     );
 
-    const [newSession] = await db.query(`SELECT * FROM study_sessions WHERE id = ?`, [result.insertId]);
+    const [newSession] = await db.query(`SELECT * FROM study_sessions WHERE id = ?`, [nextId]);
     res.json({ session: newSession[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -195,7 +201,17 @@ app.post('/api/session/pause', async (req, res) => {
   const { sessionId, activeSeconds } = req.body;
   try {
     await db.query(`UPDATE study_sessions SET status = 'paused', total_active_seconds = ? WHERE id = ?`, [activeSeconds, sessionId]);
-    await db.query(`INSERT INTO pause_intervals (session_id, pause_start) VALUES (?, NOW())`, [sessionId]);
+
+    // Get ID from the last started pause
+    const [lastPause] = await db.query(
+      `SELECT id FROM pause_intervals ORDER BY pause_start DESC, id DESC LIMIT 1`
+    );
+    const nextPauseId = lastPause.length > 0 ? lastPause[0].id + 1 : 1;
+
+    await db.query(
+      `INSERT INTO pause_intervals (id, session_id, pause_start) VALUES (?, ?, NOW())`,
+      [nextPauseId, sessionId]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -335,15 +351,21 @@ app.post('/api/session/long-interrupt', async (req, res) => {
   try {
     await db.query(`UPDATE pause_intervals SET pause_end = NOW() WHERE session_id = ? AND pause_end IS NULL`, [sessionId]);
     await db.query(`UPDATE study_sessions SET status = ?, total_active_seconds = ?, end_time = NOW() WHERE id = ?`, [newStatus, activeSeconds, sessionId]);
-    await db.query(`INSERT INTO pause_intervals (session_id, pause_start, pause_end, pause_type) VALUES (?, NOW(), NOW(), 'long_term')`, [sessionId]);
+
+    // Get ID from the last started pause
+    const [lastPause] = await db.query(
+      `SELECT id FROM pause_intervals ORDER BY pause_start DESC, id DESC LIMIT 1`
+    );
+    const nextPauseId = lastPause.length > 0 ? lastPause[0].id + 1 : 1;
+
+    await db.query(
+      `INSERT INTO pause_intervals (id, session_id, pause_start, pause_end, pause_type) VALUES (?, ?, NOW(), NOW(), 'long_term')`,
+      [nextPauseId, sessionId]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`Mission GATE 2027 Tracker running at http://localhost:${PORT}`);
 });
 
 // ADD THIS DEBUG ENDPOINT TO server.js

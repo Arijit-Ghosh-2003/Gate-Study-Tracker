@@ -1,6 +1,8 @@
 -- Mission GATE 2027 Study Tracker Schema v3
 CREATE DATABASE IF NOT EXISTS study_tracker;
 USE study_tracker;
+SHOW CREATE TABLE study_sessions;
+SHOW CREATE TABLE pause_intervals;
 
 -- Table to store study & practice exam sessions
 CREATE TABLE IF NOT EXISTS study_sessions (
@@ -45,7 +47,12 @@ ALTER TABLE pause_intervals
 ADD COLUMN pause_type ENUM('short', 'long_term') DEFAULT 'short';
 
 Select * from study_sessions;
-Select * from pause_intervals;
+Select * from pause_intervals where id>1000;
+
+ALTER TABLE study_sessions AUTO_INCREMENT = 202600058;
+ALTER TABLE pause_intervals AUTO_INCREMENT = 20260001500;
+
+Select max(id) from pause_intervals;
 
 update study_sessions
 set status='long_interruption'
@@ -64,7 +71,9 @@ SELECT
 FROM information_schema.tables
 WHERE table_schema = 'study_tracker';
 
+
 ANALYZE TABLE pause_intervals;
+ANALYZE TABLE study_sessions;
 
 UPDATE study_sessions 
 SET 

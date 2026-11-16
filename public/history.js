@@ -5,8 +5,9 @@
 document.addEventListener('DOMContentLoaded', loadFullHistory);
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const PREVIEW_ROW_LIMIT = 2; // Number of sessions shown when week is collapsed
 
-// Same 59-level color scale as dashboard heatmap (style.css)
+// Exact 59-level daily color scale matching dashboard heatmap (style.css)
 function getHeatmapLevel(minutes) {
   if (minutes <= 0) return 'lvl-0';
   if (minutes <= 360) return `lvl-${Math.ceil(minutes / 10)}`;
@@ -15,15 +16,40 @@ function getHeatmapLevel(minutes) {
   return 'lvl-59';
 }
 
-// Weekly Study Volume Icon & Tier Badge
-function getWeeklyStudyBadge(totalSeconds) {
-  const hrs = totalSeconds / 3600;
-  if (hrs >= 50) return { icon: '👑', label: 'Legendary Week (50h+)', bg: 'rgba(250, 204, 21, 0.2)', color: '#fde047' };
-  if (hrs >= 35) return { icon: '🔥', label: 'Power Week (35h+)', bg: 'rgba(249, 115, 22, 0.2)', color: '#fb923c' };
-  if (hrs >= 20) return { icon: '⚡', label: 'Strong Momentum (20h+)', bg: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8' };
-  if (hrs >= 10) return { icon: '📘', label: 'Steady Progress (10h+)', bg: 'rgba(34, 197, 94, 0.2)', color: '#4ade80' };
-  if (hrs > 0)   return { icon: '🌱', label: 'Starter Week (<10h)', bg: 'rgba(148, 163, 184, 0.2)', color: '#cbd5e1' };
-  return { icon: '💤', label: 'Rest Week (0h)', bg: 'rgba(100, 116, 139, 0.15)', color: '#94a3b8' };
+// 45-Level Weekly Study Time Color Tier & Icon
+function getWeeklyLevelInfo(totalSeconds) {
+  if (totalSeconds <= 0) {
+    return { level: 0, className: 'week-lvl-0', icon: '💤', tier: 'Rest Week' };
+  }
+
+  const hours = totalSeconds / 3600;
+  let level = 1;
+
+  if (hours <= 20) {
+    // 1h to 20h -> Levels 1 to 20 (1 level per hour)
+    level = Math.max(1, Math.ceil(hours));
+  } else if (hours <= 50) {
+    // 20h to 50h -> Levels 21 to 35 (1 level per 2 hours)
+    level = 20 + Math.ceil((hours - 20) / 2);
+  } else {
+    // 50h to 100h+ -> Levels 36 to 45 (1 level per 5 hours, capped at 45)
+    level = Math.min(45, 35 + Math.ceil((hours - 50) / 5));
+  }
+
+  let icon = '🌱';
+  let tier = 'Starter';
+  if (level >= 43)      { icon = '💎'; tier = 'Diamond Elite'; }
+  else if (level >= 37) { icon = '👑'; tier = 'Champion'; }
+  else if (level >= 28) { icon = '🔥'; tier = 'Blazing'; }
+  else if (level >= 19) { icon = '⚡'; tier = 'High Focus'; }
+  else if (level >= 10) { icon = '📘'; tier = 'Momentum'; }
+
+  return {
+    level,
+    className: `week-lvl-${level}`,
+    icon,
+    tier
+  };
 }
 
 function formatHoursMins(totalSeconds) {
@@ -32,7 +58,6 @@ function formatHoursMins(totalSeconds) {
   return `${hrs}h ${mins}m`;
 }
 
-// Convert Date object to local YYYY-MM-DD key
 function toLocalDateKey(dateObj) {
   const yyyy = dateObj.getFullYear();
   const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -40,7 +65,6 @@ function toLocalDateKey(dateObj) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-// Sunday 00:00:00 of the week containing `dateObj`
 function getWeekSunday(dateObj) {
   const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
   d.setDate(d.getDate() - d.getDay());
@@ -61,7 +85,7 @@ async function loadFullHistory() {
     }
 
     // 1. Parse timestamps, compute daily totals, and group by Month -> Week
-    const dailyTotals = {}; // { 'YYYY-MM-DD': totalActiveSeconds }
+    const dailyTotals = {};
     const monthsMap = new Map();
 
     history.forEach(item => {
@@ -78,7 +102,6 @@ async function loadFullHistory() {
       const activeSecs = item.total_active_seconds || 0;
       dailyTotals[dateKey] = (dailyTotals[dateKey] || 0) + activeSecs;
 
-      // Month bucket (e.g., "2026-11")
       const monthKey = `${startDateObj.getFullYear()}-${String(startDateObj.getMonth() + 1).padStart(2, '0')}`;
       const monthLabel = startDateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
@@ -93,7 +116,6 @@ async function loadFullHistory() {
       const monthGroup = monthsMap.get(monthKey);
       monthGroup.totalSeconds += activeSecs;
 
-      // Week bucket anchored by Sunday of that week
       const sundayObj = getWeekSunday(startDateObj);
       const weekKey = toLocalDateKey(sundayObj);
 
@@ -112,7 +134,7 @@ async function loadFullHistory() {
 
     container.innerHTML = '';
 
-    // 2. Render each Month section and its Week cards (newest first)
+    // 2. Render each Month section and its collapsible Week cards
     monthsMap.forEach(monthGroup => {
       const monthSection = document.createElement('section');
       monthSection.className = 'month-group';
@@ -131,12 +153,14 @@ async function loadFullHistory() {
 
         const startStr = weekGroup.sundayObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         const endStr = satObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const badge = getWeeklyStudyBadge(weekGroup.totalSeconds);
+        const weekInfo = getWeeklyLevelInfo(weekGroup.totalSeconds);
+        const totalCount = weekGroup.sessions.length;
+        const hiddenCount = Math.max(0, totalCount - PREVIEW_ROW_LIMIT);
 
         const weekCard = document.createElement('div');
         weekCard.className = 'card week-card';
 
-        // Week Header + 7-Day Single-Row Heatmap Strip
+        // Week Header + 45-Level Time Pill + 7-Day Row Heatmap + Dropdown Arrow Button
         const weekHeader = document.createElement('div');
         weekHeader.className = 'week-header';
 
@@ -145,14 +169,16 @@ async function loadFullHistory() {
         weekMeta.innerHTML = `
           <h3 class="week-range-title">📅 Week of ${startStr} – ${endStr}</h3>
           <div class="week-stats-row">
-            <span class="week-total-time">⏱️ ${formatHoursMins(weekGroup.totalSeconds)}</span>
-            <span class="week-rank-badge" style="background: ${badge.bg}; color: ${badge.color};">
-              ${badge.icon} ${badge.label}
+            <span class="week-time-pill ${weekInfo.className}">
+              ${weekInfo.icon} ${formatHoursMins(weekGroup.totalSeconds)} • Lvl ${weekInfo.level} (${weekInfo.tier})
             </span>
           </div>
         `;
 
-        // Build the 7-tile single-row heatmap (Sun -> Sat)
+        const rightControls = document.createElement('div');
+        rightControls.className = 'week-header-right';
+
+        // 7-Tile Single-Row Heatmap using exact .square.lvl-X classes from style.css
         const rowHeatmap = document.createElement('div');
         rowHeatmap.className = 'week-row-heatmap';
 
@@ -174,10 +200,10 @@ async function loadFullHistory() {
 
           const tileBtn = document.createElement('button');
           tileBtn.type = 'button';
-          tileBtn.className = `day-tile-btn ${lvlClass}`;
+          tileBtn.className = `square day-tile-btn ${lvlClass}`;
           tileBtn.innerText = dayObj.getDate();
 
-          // Hover tooltip showing exact date & study time
+          // Hover tooltip
           tileBtn.addEventListener('mouseenter', () => {
             const fullDateStr = dayObj.toLocaleDateString('en-US', {
               weekday: 'short',
@@ -200,7 +226,7 @@ async function loadFullHistory() {
             tooltip.classList.add('hidden');
           });
 
-          // Click handler: scroll smoothly to that date's rows and highlight them
+          // Click date tile: auto-expand week if collapsed, scroll to date, and highlight rows
           tileBtn.addEventListener('click', () => {
             document.querySelectorAll('.day-tile-btn.active-selected-day')
               .forEach(el => el.classList.remove('active-selected-day'));
@@ -216,13 +242,16 @@ async function loadFullHistory() {
               return;
             }
 
-            // Smoothly scroll cursor/viewport to the first session of that date
+            // Expand the week card automatically if the target session was hidden
+            if (!weekCard.classList.contains('expanded') && hiddenCount > 0) {
+              setWeekExpandedState(true);
+            }
+
             matchingRows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-            // Re-trigger pulse highlight on all sessions for that clicked date
             matchingRows.forEach(row => {
               row.classList.remove('date-highlight-row');
-              void row.offsetWidth; // Force reflow so animation restarts cleanly
+              void row.offsetWidth;
               row.classList.add('date-highlight-row');
             });
           });
@@ -232,8 +261,32 @@ async function loadFullHistory() {
           rowHeatmap.appendChild(tileWrapper);
         }
 
+        rightControls.appendChild(rowHeatmap);
+
+        // Dropdown Arrow Button to expand/collapse all sessions of the week
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'week-toggle-btn';
+        toggleBtn.setAttribute('aria-expanded', 'false');
+
+        const toggleText = document.createElement('span');
+        toggleText.innerText = hiddenCount > 0 ? `Show All (${totalCount})` : `All (${totalCount})`;
+
+        const toggleArrow = document.createElement('span');
+        toggleArrow.className = 'week-toggle-arrow';
+        toggleArrow.innerText = '▼';
+
+        toggleBtn.appendChild(toggleText);
+        toggleBtn.appendChild(toggleArrow);
+
+        if (hiddenCount === 0) {
+          toggleBtn.style.opacity = '0.65';
+          toggleBtn.style.cursor = 'default';
+        }
+
+        rightControls.appendChild(toggleBtn);
         weekHeader.appendChild(weekMeta);
-        weekHeader.appendChild(rowHeatmap);
+        weekHeader.appendChild(rightControls);
         weekCard.appendChild(weekHeader);
 
         // Week Sessions Table
@@ -258,9 +311,12 @@ async function loadFullHistory() {
 
         const tbody = tableWrapper.querySelector('tbody');
 
-        weekGroup.sessions.forEach(item => {
+        weekGroup.sessions.forEach((item, idx) => {
           const row = document.createElement('tr');
           row.setAttribute('data-date', item._dateKey);
+          if (idx >= PREVIEW_ROW_LIMIT) {
+            row.classList.add('extra-session-row');
+          }
 
           const formattedDate = item._startDateObj.toLocaleDateString('en-US', {
             month: 'short',
@@ -296,7 +352,7 @@ async function loadFullHistory() {
             const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
             if (shortPauses.length > 0) {
               pauseHtml = '<ul class="pause-list">';
-              shortPauses.forEach((p, idx) => {
+              shortPauses.forEach((p, pIdx) => {
                 const pStartObj = new Date(
                   typeof p.pause_start === 'string' && !p.pause_start.endsWith('Z')
                     ? p.pause_start.replace(' ', 'T') + 'Z'
@@ -314,7 +370,7 @@ async function loadFullHistory() {
                   pEnd = pEndObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 }
 
-                pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
+                pauseHtml += `<li>Break #${pIdx + 1}: ${pStart} - ${pEnd}</li>`;
               });
               pauseHtml += '</ul>';
             }
@@ -335,6 +391,43 @@ async function loadFullHistory() {
         });
 
         weekCard.appendChild(tableWrapper);
+
+        // Optional bottom expand/collapse bar when there are > 2 sessions
+        let bottomLink = null;
+        if (hiddenCount > 0) {
+          const footer = document.createElement('div');
+          footer.className = 'week-preview-footer';
+          bottomLink = document.createElement('button');
+          bottomLink.type = 'button';
+          bottomLink.className = 'week-expand-link';
+          bottomLink.innerText = `▼ Show ${hiddenCount} more session${hiddenCount > 1 ? 's' : ''} from this week`;
+          footer.appendChild(bottomLink);
+          weekCard.appendChild(footer);
+        }
+
+        function setWeekExpandedState(expand) {
+          if (hiddenCount === 0) return;
+          weekCard.classList.toggle('expanded', expand);
+          toggleBtn.setAttribute('aria-expanded', String(expand));
+          toggleText.innerText = expand ? 'Hide Extra' : `Show All (${totalCount})`;
+          if (bottomLink) {
+            bottomLink.innerText = expand
+              ? '▲ Collapse week sessions'
+              : `▼ Show ${hiddenCount} more session${hiddenCount > 1 ? 's' : ''} from this week`;
+          }
+        }
+
+        if (hiddenCount > 0) {
+          toggleBtn.addEventListener('click', () => {
+            setWeekExpandedState(!weekCard.classList.contains('expanded'));
+          });
+          if (bottomLink) {
+            bottomLink.addEventListener('click', () => {
+              setWeekExpandedState(!weekCard.classList.contains('expanded'));
+            });
+          }
+        }
+
         monthSection.appendChild(weekCard);
       });
 

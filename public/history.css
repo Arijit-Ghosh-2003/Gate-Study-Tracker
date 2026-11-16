@@ -80,6 +80,11 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.week-card.expanded .week-header {
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border-color, #334155);
 }
@@ -109,7 +114,6 @@
   gap: 10px;
   flex-wrap: wrap;
 }
-
 /* =============================================================
    45-LEVEL WEEKLY STUDY TIME COLOR BADGE (week-lvl-0 to week-lvl-45)
    ============================================================= */
@@ -291,7 +295,8 @@
 }
 
 /* Hide sessions beyond the first 2 preview rows when collapsed */
-.week-card:not(.expanded) tbody tr.extra-session-row {
+/* Hide the entire sessions table by default; show only when .expanded is active */
+.week-card:not(.expanded) .table-responsive {
   display: none;
 }
 

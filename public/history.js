@@ -5,7 +5,6 @@
 document.addEventListener('DOMContentLoaded', loadFullHistory);
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const PREVIEW_ROW_LIMIT = 2; // Number of sessions shown when week is collapsed
 
 // Exact 59-level daily color scale matching dashboard heatmap (style.css)
 function getHeatmapLevel(minutes) {
@@ -26,13 +25,10 @@ function getWeeklyLevelInfo(totalSeconds) {
   let level = 1;
 
   if (hours <= 20) {
-    // 1h to 20h -> Levels 1 to 20 (1 level per hour)
     level = Math.max(1, Math.ceil(hours));
   } else if (hours <= 50) {
-    // 20h to 50h -> Levels 21 to 35 (1 level per 2 hours)
     level = 20 + Math.ceil((hours - 20) / 2);
   } else {
-    // 50h to 100h+ -> Levels 36 to 45 (1 level per 5 hours, capped at 45)
     level = Math.min(45, 35 + Math.ceil((hours - 50) / 5));
   }
 
@@ -155,12 +151,11 @@ async function loadFullHistory() {
         const endStr = satObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const weekInfo = getWeeklyLevelInfo(weekGroup.totalSeconds);
         const totalCount = weekGroup.sessions.length;
-        const hiddenCount = Math.max(0, totalCount - PREVIEW_ROW_LIMIT);
 
         const weekCard = document.createElement('div');
         weekCard.className = 'card week-card';
 
-        // Week Header + 45-Level Time Pill + 7-Day Row Heatmap + Dropdown Arrow Button
+        // Week Header + 45-Level Time Pill + 7-Day Row Heatmap + Show All / Hide All Button
         const weekHeader = document.createElement('div');
         weekHeader.className = 'week-header';
 
@@ -178,7 +173,7 @@ async function loadFullHistory() {
         const rightControls = document.createElement('div');
         rightControls.className = 'week-header-right';
 
-        // 7-Tile Single-Row Heatmap using exact .square.lvl-X classes from style.css
+        // 7-Tile Single-Row Heatmap
         const rowHeatmap = document.createElement('div');
         rowHeatmap.className = 'week-row-heatmap';
 
@@ -226,7 +221,7 @@ async function loadFullHistory() {
             tooltip.classList.add('hidden');
           });
 
-          // Click date tile: auto-expand week if collapsed, scroll to date, and highlight rows
+          // Click date tile: open week sessions, scroll to date, and highlight rows
           tileBtn.addEventListener('click', () => {
             document.querySelectorAll('.day-tile-btn.active-selected-day')
               .forEach(el => el.classList.remove('active-selected-day'));
@@ -242,8 +237,7 @@ async function loadFullHistory() {
               return;
             }
 
-            // Expand the week card automatically if the target session was hidden
-            if (!weekCard.classList.contains('expanded') && hiddenCount > 0) {
+            if (!weekCard.classList.contains('expanded')) {
               setWeekExpandedState(true);
             }
 
@@ -263,14 +257,14 @@ async function loadFullHistory() {
 
         rightControls.appendChild(rowHeatmap);
 
-        // Dropdown Arrow Button to expand/collapse all sessions of the week
+        // Show All / Hide All Dropdown Button
         const toggleBtn = document.createElement('button');
         toggleBtn.type = 'button';
         toggleBtn.className = 'week-toggle-btn';
         toggleBtn.setAttribute('aria-expanded', 'false');
 
         const toggleText = document.createElement('span');
-        toggleText.innerText = hiddenCount > 0 ? `Show All (${totalCount})` : `All (${totalCount})`;
+        toggleText.innerText = `Show All (${totalCount})`;
 
         const toggleArrow = document.createElement('span');
         toggleArrow.className = 'week-toggle-arrow';
@@ -279,17 +273,12 @@ async function loadFullHistory() {
         toggleBtn.appendChild(toggleText);
         toggleBtn.appendChild(toggleArrow);
 
-        if (hiddenCount === 0) {
-          toggleBtn.style.opacity = '0.65';
-          toggleBtn.style.cursor = 'default';
-        }
-
         rightControls.appendChild(toggleBtn);
         weekHeader.appendChild(weekMeta);
         weekHeader.appendChild(rightControls);
         weekCard.appendChild(weekHeader);
 
-        // Week Sessions Table
+        // Week Sessions Table (hidden by default until Show All is clicked)
         const tableWrapper = document.createElement('div');
         tableWrapper.className = 'table-responsive';
         tableWrapper.innerHTML = `
@@ -311,12 +300,9 @@ async function loadFullHistory() {
 
         const tbody = tableWrapper.querySelector('tbody');
 
-        weekGroup.sessions.forEach((item, idx) => {
+        weekGroup.sessions.forEach(item => {
           const row = document.createElement('tr');
           row.setAttribute('data-date', item._dateKey);
-          if (idx >= PREVIEW_ROW_LIMIT) {
-            row.classList.add('extra-session-row');
-          }
 
           const formattedDate = item._startDateObj.toLocaleDateString('en-US', {
             month: 'short',
@@ -392,41 +378,15 @@ async function loadFullHistory() {
 
         weekCard.appendChild(tableWrapper);
 
-        // Optional bottom expand/collapse bar when there are > 2 sessions
-        let bottomLink = null;
-        if (hiddenCount > 0) {
-          const footer = document.createElement('div');
-          footer.className = 'week-preview-footer';
-          bottomLink = document.createElement('button');
-          bottomLink.type = 'button';
-          bottomLink.className = 'week-expand-link';
-          bottomLink.innerText = `▼ Show ${hiddenCount} more session${hiddenCount > 1 ? 's' : ''} from this week`;
-          footer.appendChild(bottomLink);
-          weekCard.appendChild(footer);
-        }
-
         function setWeekExpandedState(expand) {
-          if (hiddenCount === 0) return;
           weekCard.classList.toggle('expanded', expand);
           toggleBtn.setAttribute('aria-expanded', String(expand));
-          toggleText.innerText = expand ? 'Hide Extra' : `Show All (${totalCount})`;
-          if (bottomLink) {
-            bottomLink.innerText = expand
-              ? '▲ Collapse week sessions'
-              : `▼ Show ${hiddenCount} more session${hiddenCount > 1 ? 's' : ''} from this week`;
-          }
+          toggleText.innerText = expand ? 'Hide All' : `Show All (${totalCount})`;
         }
 
-        if (hiddenCount > 0) {
-          toggleBtn.addEventListener('click', () => {
-            setWeekExpandedState(!weekCard.classList.contains('expanded'));
-          });
-          if (bottomLink) {
-            bottomLink.addEventListener('click', () => {
-              setWeekExpandedState(!weekCard.classList.contains('expanded'));
-            });
-          }
-        }
+        toggleBtn.addEventListener('click', () => {
+          setWeekExpandedState(!weekCard.classList.contains('expanded'));
+        });
 
         monthSection.appendChild(weekCard);
       });

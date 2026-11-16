@@ -14,36 +14,24 @@
     <header class="top-banner history-header">
       <div class="title-section">
         <h1>📚 Complete Session History Archive</h1>
-        <p class="subtitle">All logged study and exam practice sessions</p>
+        <p class="subtitle">Monthly & weekly breakdown with interactive 7-day row heatmaps</p>
       </div>
       <div class="header-actions">
         <a href="/" class="btn primary back-link">← Back to Dashboard</a>
       </div>
     </header>
 
-    <!-- Complete History Table Card -->
-    <section class="card history-card">
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>Date & Time</th>
-              <th>Mode & Subject</th>
-              <th>Topic / Chapter & Platform</th>
-              <th>Type & Goal</th>
-              <th>Active Duration</th>
-              <th>Target vs Actual Variance</th>
-              <th>Break / Interruption Logs</th>
-            </tr>
-          </thead>
-          <tbody id="full-history-tbody">
-            <tr><td colspan="7" class="text-center">Loading complete history...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <!-- Dynamic Month & Week Grouped History Container -->
+    <main id="weekly-history-container" class="weekly-archive-container">
+      <section class="card">
+        <p class="text-center">Loading complete history archive...</p>
+      </section>
+    </main>
 
   </div>
+
+  <!-- Floating Tooltip for Row Heatmap Tiles -->
+  <div id="history-heatmap-tooltip" class="heatmap-tooltip hidden"></div>
 
   <script src="history.js"></script>
 </body>

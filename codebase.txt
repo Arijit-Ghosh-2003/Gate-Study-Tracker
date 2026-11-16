@@ -520,42 +520,31 @@ function formatHoursMins(totalSeconds) {
 // 6. Heatmap
 // REPLACE getHeatmapLevel(minutes) in public/app.js WITH THIS:
 function getHeatmapLevel(minutes) {
-  if (minutes <= 0) return 'lvl-0';       // 0 min
+  if (minutes <= 0) return 'lvl-0';
 
-  // 0 - 1 Hour (Every 10 mins)
-  if (minutes <= 10) return 'lvl-1';     // 1–10m
-  if (minutes <= 20) return 'lvl-2';     // 11–20m
-  if (minutes <= 30) return 'lvl-3';     // 21–30m
-  if (minutes <= 40) return 'lvl-4';     // 31–40m
-  if (minutes <= 50) return 'lvl-5';     // 41–50m
-  if (minutes <= 60) return 'lvl-6';     // 51–60m (1h)
+  // 1. 0 to 6 Hours (1 to 360 mins): Changes every 10 mins -> lvl-1 to lvl-36
+  if (minutes <= 360) {
+    const level = Math.ceil(minutes / 10);
+    return `lvl-${level}`;
+  }
 
-  // 1 - 2 Hours (Every 15 mins)
-  if (minutes <= 75) return 'lvl-7';     // 1h 15m
-  if (minutes <= 90) return 'lvl-8';     // 1h 30m
-  if (minutes <= 105) return 'lvl-9';    // 1h 45m
-  if (minutes <= 120) return 'lvl-10';   // 2h
+  // 2. 6 to 10 Hours (361 to 600 mins): Changes every 15 mins -> lvl-37 to lvl-52
+  if (minutes <= 600) {
+    const extraMins = minutes - 360;
+    const level = 36 + Math.ceil(extraMins / 15);
+    return `lvl-${level}`;
+  }
 
-  // 2 - 6 Hours (Every 30 mins)
-  if (minutes <= 150) return 'lvl-11';   // 2.5h
-  if (minutes <= 180) return 'lvl-12';   // 3h
-  if (minutes <= 210) return 'lvl-13';   // 3.5h
-  if (minutes <= 240) return 'lvl-14';   // 4h
-  if (minutes <= 270) return 'lvl-15';   // 4.5h
-  if (minutes <= 300) return 'lvl-16';   // 5h
-  if (minutes <= 330) return 'lvl-17';   // 5.5h
-  if (minutes <= 360) return 'lvl-18';   // 6h
+  // 3. 10 to 16 Hours (601 to 960 mins): Changes every 1 Hour (60 mins) -> lvl-53 to lvl-58
+  if (minutes <= 960) {
+    const extraMins = minutes - 600;
+    const level = 52 + Math.ceil(extraMins / 60);
+    return `lvl-${level}`;
+  }
 
-  // > 6 Hours (Every 1 hour)
-  if (minutes <= 420) return 'lvl-19';   // 7h
-  if (minutes <= 480) return 'lvl-20';   // 8h
-  if (minutes <= 540) return 'lvl-21';   // 9h
-  if (minutes <= 600) return 'lvl-22';   // 10h
-  if (minutes <= 660) return 'lvl-23';   // 11h
-  if (minutes <= 720) return 'lvl-24';   // 12h
-  return 'lvl-25';                       // > 12h
+  // 4. > 16 Hours (> 960 mins) -> lvl-59
+  return 'lvl-59';
 }
-
 async function loadHeatmap() {
   const res = await fetch('/api/analytics/heatmap');
   const { data } = await res.json();
@@ -610,7 +599,8 @@ data.forEach(item => {
       square.className = `square ${level}`;
 
       // LeetCode-style Floating Tooltip Events
-      square.addEventListener('mouseenter', (e) => {
+// Tile-Anchored Tooltip Events
+      square.addEventListener('mouseenter', () => {
         const d = new Date(dateStr + 'T00:00:00');
         const dateFormatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         
@@ -623,12 +613,13 @@ data.forEach(item => {
         }
 
         tooltip.innerHTML = `${timeStr} on <strong>${dateFormatted}</strong>`;
-        tooltip.classList.remove('hidden');
-      });
 
-      square.addEventListener('mousemove', (e) => {
-        tooltip.style.left = `${e.pageX}px`;
-        tooltip.style.top = `${e.pageY}px`;
+        // Anchoring directly to tile's screen coordinates
+        const rect = square.getBoundingClientRect();
+        tooltip.style.left = `${rect.left + rect.width / 2}px`;
+        tooltip.style.top = `${rect.top - 8}px`;
+
+        tooltip.classList.remove('hidden');
       });
 
       square.addEventListener('mouseleave', () => {
@@ -701,18 +692,34 @@ async function loadHistory() {
     }
 
     let pauseHtml = '<span style="color: #64748b;">No breaks</span>';
-    if (item.pauses && item.pauses.length > 0) {
-      const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
-      if (shortPauses.length > 0) {
-        pauseHtml = '<ul class="pause-list">';
-        shortPauses.forEach((p, idx) => {
-          const pStart = new Date(p.pause_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const pEnd = p.pause_end ? new Date(p.pause_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ongoing';
-          pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
-        });
-        pauseHtml += '</ul>';
-      }
-    }
+        if (item.pauses && item.pauses.length > 0) {
+          const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
+          if (shortPauses.length > 0) {
+            pauseHtml = '<ul class="pause-list">';
+            shortPauses.forEach((p, idx) => {
+              // Convert UTC string to IST Date object
+              const pStartObj = new Date(
+                typeof p.pause_start === 'string' && !p.pause_start.endsWith('Z')
+                  ? p.pause_start.replace(' ', 'T') + 'Z'
+                  : p.pause_start
+              );
+              const pStart = pStartObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+              let pEnd = 'Ongoing';
+              if (p.pause_end) {
+                const pEndObj = new Date(
+                  typeof p.pause_end === 'string' && !p.pause_end.endsWith('Z')
+                    ? p.pause_end.replace(' ', 'T') + 'Z'
+                    : p.pause_end
+                );
+                pEnd = pEndObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              }
+
+              pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
+            });
+            pauseHtml += '</ul>';
+          }
+        }
 
     const modeBadge = `<span class="badge" style="background: ${item.session_mode === 'practice_exam' ? '#8b5cf6' : '#3b82f6'}">${item.session_mode.toUpperCase().replace('_', ' ')}</span>`;
 
@@ -945,26 +952,37 @@ async function loadFullHistory() {
         deltaHtml = `<span class="delta-tag" style="background:#334155;">Exact Target</span>`;
       }
 
-      // Filter short-term breaks for log display
+// Filter short-term breaks for log display with UTC-to-IST conversion
       let pauseHtml = '<span style="color: #64748b;">No breaks</span>';
       if (item.pauses && item.pauses.length > 0) {
         const shortPauses = item.pauses.filter(p => p.pause_type !== 'long_term');
         if (shortPauses.length > 0) {
           pauseHtml = '<ul class="pause-list">';
           shortPauses.forEach((p, idx) => {
-            const pStart = new Date(
+            // Safely parse start time string into UTC Date object
+            const pStartObj = new Date(
               typeof p.pause_start === 'string' && !p.pause_start.endsWith('Z')
                 ? p.pause_start.replace(' ', 'T') + 'Z'
                 : p.pause_start
-            ).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            );
+            const pStart = pStartObj.toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            });
 
-            const pEnd = p.pause_end 
-              ? new Date(
-                  typeof p.pause_end === 'string' && !p.pause_end.endsWith('Z')
-                    ? p.pause_end.replace(' ', 'T') + 'Z'
-                    : p.pause_end
-                ).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-              : 'Ongoing';
+            // Safely parse end time string into UTC Date object
+            let pEnd = 'Ongoing';
+            if (p.pause_end) {
+              const pEndObj = new Date(
+                typeof p.pause_end === 'string' && !p.pause_end.endsWith('Z')
+                  ? p.pause_end.replace(' ', 'T') + 'Z'
+                  : p.pause_end
+              );
+              pEnd = pEndObj.toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              });
+            }
 
             pauseHtml += `<li>Break #${idx + 1}: ${pStart} - ${pEnd}</li>`;
           });
@@ -1156,16 +1174,15 @@ function escapeHtml(text) {
           <div id="heatmap-tooltip" class="heatmap-tooltip hidden"></div>
           <!-- AFTER (What to replace it with) -->
             <!-- REPLACE <div class="heatmap-legend"> IN public/index.html WITH THIS: -->
-            <div class="heatmap-legend">
-              <div class="legend-item"><span class="square lvl-0"></span> 0m</div>
-              <div class="legend-item"><span class="square lvl-3"></span> 30m</div>
-              <div class="legend-item"><span class="square lvl-6"></span> 1h</div>
-              <div class="legend-item"><span class="square lvl-10"></span> 2h</div>
-              <div class="legend-item"><span class="square lvl-14"></span> 4h</div>
-              <div class="legend-item"><span class="square lvl-18"></span> 6h</div>
-              <div class="legend-item"><span class="square lvl-22"></span> 10h</div>
-              <div class="legend-item"><span class="square lvl-25"></span> 12h+</div>
-            </div>
+          <div class="heatmap-legend">
+            <div class="legend-item"><span class="square lvl-0"></span> 0m</div>
+            <div class="legend-item"><span class="square lvl-6"></span> 1h</div>
+            <div class="legend-item"><span class="square lvl-18"></span> 3h</div>
+            <div class="legend-item"><span class="square lvl-36"></span> 6h</div>
+            <div class="legend-item"><span class="square lvl-52"></span> 10h</div>
+            <div class="legend-item"><span class="square lvl-58"></span> 16h</div>
+            <div class="legend-item"><span class="square lvl-59"></span> 16h+</div>
+          </div>
         </div>
 
         <div class="stats-sidebar">
@@ -1519,27 +1536,33 @@ input[type="text"], input[type="number"], select {
 
 /* AFTER (What to replace it with) */
 /* 3-Month Heatmap Container with Flex Wrapping */
+/* =============================================================
+   ENLARGED HEATMAP GRID & MONTH BLOCKS
+   ============================================================= */
+/* =============================================================
+   ENLARGED HEATMAP GRID LAYOUT (18px Rounded Tiles)
+   ============================================================= */
 .heatmap-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 20px;
   justify-content: flex-start;
-  padding: 12px 0;
+  padding: 16px 0;
 }
 
 .month-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   background: #0f172a;
-  padding: 12px;
-  border-radius: 10px;
+  padding: 16px;
+  border-radius: 12px;
   border: 1px solid var(--border-color);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.4);
 }
 
 .month-title {
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: #38bdf8;
   text-align: center;
@@ -1548,33 +1571,187 @@ input[type="text"], input[type="number"], select {
 
 .days-grid {
   display: grid;
-  grid-template-rows: repeat(7, 14px);
+  grid-template-rows: repeat(7, 18px);
   grid-auto-flow: column;
-  grid-auto-columns: 14px;
-  gap: 4px;
+  grid-auto-columns: 18px;
+  gap: 5px;
 }
 
-/* Day Tile Styles */
-/* Base Square Tile Refinement for Crisp Borders */
 .square {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .square:hover {
-  transform: scale(1.35);
+  transform: scale(1.4);
   border-color: #ffffff;
   z-index: 10;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
 }
 
-/* LeetCode-Style Floating Popup Tooltip */
+/* -------------------------------------------------------------
+   GREEN FAMILY (10m to 1h • Lvl 1 - 6)
+   ------------------------------------------------------------- */
+.square.lvl-1  { background-color: #064e3b; } /* 10m  - Dark Pine */
+.square.lvl-2  { background-color: #16a34a; } /* 20m  - Green */
+.square.lvl-3  { background-color: #84cc16; } /* 30m  - Lime */
+.square.lvl-4  { background-color: #0d9488; } /* 40m  - Teal */
+.square.lvl-5  { background-color: #34d399; } /* 50m  - Emerald */
+.square.lvl-6  { background-color: #bbf7d0; } /* 1h   - Pale Mint */
+
+/* -------------------------------------------------------------
+   BLUE FAMILY (1h 10m to 2h 30m • Lvl 7 - 15)
+   ------------------------------------------------------------- */
+.square.lvl-7  { background-color: #172554; } /* 1h 10m - Midnight Navy */
+.square.lvl-8  { background-color: #1d4ed8; } /* 1h 20m - Royal Blue */
+.square.lvl-9  { background-color: #0284c7; } /* 1h 30m - Sapphire */
+.square.lvl-10 { background-color: #38bdf8; } /* 1h 40m - Sky Blue */
+.square.lvl-11 { background-color: #155e75; } /* 1h 50m - Deep Teal Blue */
+.square.lvl-12 { background-color: #64748b; } /* 2h     - Steel Blue-Gray */
+.square.lvl-13 { background-color: #4338ca; } /* 2h 10m - Indigo */
+.square.lvl-14 { background-color: #818cf8; } /* 2h 20m - Periwinkle */
+.square.lvl-15 { background-color: #bae6fd; } /* 2h 30m - Ice Blue */
+
+/* -------------------------------------------------------------
+   VIOLET TO ROSE (2h 40m to 4h • Lvl 16 - 24)
+   ------------------------------------------------------------- */
+.square.lvl-16 { background-color: #2e1065; } /* 2h 40m - Midnight Violet */
+.square.lvl-17 { background-color: #7c3aed; } /* 2h 50m - Violet */
+.square.lvl-18 { background-color: #c4b5fd; } /* 3h     - Lavender */
+.square.lvl-19 { background-color: #86198f; } /* 3h 10m - Dark Magenta */
+.square.lvl-20 { background-color: #e879f9; } /* 3h 20m - Fuchsia */
+.square.lvl-21 { background-color: #f5d0fe; } /* 3h 30m - Pale Orchid */
+.square.lvl-22 { background-color: #fda4af; } /* 3h 40m - Light Rose */
+.square.lvl-23 { background-color: #9f1239; } /* 3h 50m - Dark Crimson */
+.square.lvl-24 { background-color: #db2777; } /* 4h     - Vivid Deep Pink */
+
+/* -------------------------------------------------------------
+   ORANGE START (4h 10m • Lvl 25)
+   ------------------------------------------------------------- */
+.square.lvl-25 { background-color: #7c2d12; } /* 4h 10m - Burnt Sienna */
+.square.lvl-26 { background-color: #9a3412; } /* 4h 20m - Rust Orange */
+.square.lvl-27 { background-color: #c2410c; } /* 4h 30m - Deep Orange */
+.square.lvl-28 { background-color: #ea580c; } /* 4h 40m - Flame Orange */
+.square.lvl-29 { background-color: #f97316; } /* 4h 50m - Vivid Tangerine */
+.square.lvl-30 { background-color: #fb923c; } /* 5h     - Bright Coral Orange */
+
+/* -------------------------------------------------------------
+   RED SHADES (5h 10m to 6h • Lvl 31 - 36)
+   ------------------------------------------------------------- */
+.square.lvl-31 { background-color: #450a0a; } /* 5h 10m - Dark Maroon */
+.square.lvl-32 { background-color: #7f1d1d; } /* 5h 20m - Dark Crimson */
+.square.lvl-33 { background-color: #991b1b; } /* 5h 30m - Blood Red */
+.square.lvl-34 { background-color: #b91c1c; } /* 5h 40m - Deep Red */
+.square.lvl-35 { background-color: #dc2626; } /* 5h 50m - Fire Red */
+.square.lvl-36 { background-color: #ef4444; } /* 6h     - Bright Scarlet Red */
+
+/* -------------------------------------------------------------
+   YELLOW SHADES (6h 15m to 8h • Lvl 37 - 44)
+   ------------------------------------------------------------- */
+.square.lvl-37 { background-color: #713f12; } /* 6h 15m - Dark Ochre */
+.square.lvl-38 { background-color: #854d0e; } /* 6h 30m - Mustard Yellow */
+.square.lvl-39 { background-color: #a16207; } /* 6h 45m - Deep Amber */
+.square.lvl-40 { background-color: #ca8a04; } /* 7h     - Golden Amber */
+.square.lvl-41 { background-color: #d97706; } /* 7h 15m - Warm Sun Yellow */
+.square.lvl-42 { background-color: #eab308; } /* 7h 30m - Bright Yellow */
+.square.lvl-43 { background-color: #facc15; } /* 7h 45m - Neon Sun Yellow */
+.square.lvl-44 { background-color: #fde047; } /* 8h     - Electric Canary Yellow */
+
+/* -------------------------------------------------------------
+   GOLDEN SHADES (8h 15m to 10h • Lvl 45 - 52)
+   ------------------------------------------------------------- */
+.square.lvl-45 { background-color: #855800; } /* 8h 15m - Dark Bronze Gold */
+.square.lvl-46 { background-color: #a36e00; } /* 8h 30m - Antique Gold */
+.square.lvl-47 { background-color: #c48800; } /* 8h 45m - Warm Satin Gold */
+.square.lvl-48 { background-color: #e5a100; } /* 9h     - Rich Metallic Gold */
+.square.lvl-49 { background-color: #ffb703; } /* 9h 15m - Bright Gold */
+.square.lvl-50 { background-color: #ffc300; } /* 9h 30m - Glowing Gold */
+.square.lvl-51 { background-color: #ffd000; } /* 9h 45m - Radiant Sun Gold */
+.square.lvl-52 { background-color: #ffe066; } /* 10h    - Pure High-Shine Gold */
+
+/* -------------------------------------------------------------
+   GLITTERED & SPARKLING TIERS (11h to 16h • Lvl 53 - 58)
+   ------------------------------------------------------------- */
+.square.lvl-53 {
+  background: linear-gradient(135deg, #a5f3fc, #06b6d4, #e0f2fe);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 8px #67e8f9;
+} /* 11h - Diamond Cyan Sparkle */
+
+.square.lvl-54 {
+  background: linear-gradient(135deg, #e9d5ff, #c084fc, #f5d0fe);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 8px #c084fc;
+} /* 12h - Holographic Violet Sparkle */
+
+.square.lvl-55 {
+  background: linear-gradient(135deg, #fbcfe8, #f472b6, #ffe4e6);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 8px #f472b6;
+} /* 13h - Rose Quartz Glitter */
+
+.square.lvl-56 {
+  background: linear-gradient(135deg, #fef08a, #facc15, #ffffff);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 10px #fde047;
+} /* 14h - Golden Starburst Glitter */
+
+.square.lvl-57 {
+  background: linear-gradient(135deg, #ffedd5, #fb923c, #ffffff);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 3s ease infinite;
+  box-shadow: 0 0 10px #fb923c;
+} /* 15h - Radiant Prism Sparkle */
+
+.square.lvl-58 {
+  background: linear-gradient(135deg, #ffffff, #fef08a, #67e8f9);
+  background-size: 200% 200%;
+  animation: glitter-shimmer 2s ease infinite;
+  box-shadow: 0 0 12px #ffffff;
+} /* 16h - Iridescent Diamond Glitter */
+
+/* -------------------------------------------------------------
+   ULTRA GLITTER FOCUS (> 16 Hours • Lvl 59)
+   ------------------------------------------------------------- */
+.square.lvl-59 {
+  background: radial-gradient(circle at 30% 30%, #ffffff, #fde047 50%, #38bdf8 100%);
+  background-size: 200% 200%;
+  animation: ultra-diamond-glow 1.5s ease-in-out infinite alternate;
+  box-shadow: 0 0 12px #ffffff, 0 0 20px #fde047;
+  border: 1px solid #ffffff;
+}
+
+/* =============================================================
+   GLITTER & SHIMMER KEYFRAME ANIMATIONS
+   ============================================================= */
+@keyframes glitter-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes ultra-diamond-glow {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 8px #ffffff, 0 0 16px #fde047;
+  }
+  100% {
+    transform: scale(1.1);
+    box-shadow: 0 0 14px #ffffff, 0 0 24px #38bdf8, 0 0 30px #e879f9;
+  }
+}
+
+/* Anchored Floating Tooltip Popup */
 .heatmap-tooltip {
-  position: absolute;
+  position: fixed;
   background: #090d16;
   color: #f8fafc;
   border: 1px solid #3b82f6;
@@ -1583,65 +1760,16 @@ input[type="text"], input[type="number"], select {
   font-size: 0.78rem;
   font-weight: 600;
   pointer-events: none;
-  z-index: 9999;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 10px rgba(59, 130, 246, 0.3);
+  z-index: 99999;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 12px rgba(59, 130, 246, 0.4);
   white-space: nowrap;
-  transform: translate(-50%, -120%);
-  transition: opacity 0.1s ease, transform 0.1s ease;
+  transform: translate(-50%, -100%);
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .heatmap-tooltip strong {
   color: #38bdf8;
 }
-
-/* =============================================================
-   HIGH-CONTRAST 26-TIER HEATMAP GRADIENT PALETTE
-   ============================================================= */
-
-/* =============================================================
-   HIGH-CONTRAST 26-TIER HEATMAP GRADIENT PALETTE
-   ============================================================= */
-
-/* 0m Baseline */
-.square.lvl-0  { background-color: #1e293b; border: 1px solid #334155; }
-
-/* -------------------------------------------------------------
-   LEVELS 1 to 10: HIGH-CONTRAST PROGRESSION (0 - 2 Hours)
-   ------------------------------------------------------------- */
-.square.lvl-1  { background-color: #064e3b; } /* 10m  - Dark Forest Green */
-.square.lvl-2  { background-color: #047857; } /* 20m  - Deep Emerald Green */
-.square.lvl-3  { background-color: #059669; } /* 30m  - Rich Jade Green */
-.square.lvl-4  { background-color: #10b981; } /* 40m  - Vibrant Emerald */
-.square.lvl-5  { background-color: #06b6d4; } /* 50m  - Electric Cyan */
-.square.lvl-6  { background-color: #38bdf8; } /* 1h   - Vibrant Sky Blue */
-.square.lvl-7  { background-color: #0284c7; } /* 1h15m - Deep Ocean Blue */
-.square.lvl-8  { background-color: #2563eb; } /* 1h30m - Royal Blue */
-.square.lvl-9  { background-color: #4f46e5; } /* 1h45m - Indigo */
-.square.lvl-10 { background-color: #7c3aed; } /* 2h   - Electric Violet */
-
-/* -------------------------------------------------------------
-   LEVELS 11 to 25: EXTENDED DURATION (2+ Hours)
-   ------------------------------------------------------------- */
-.square.lvl-11 { background-color: #9333ea; } /* 2.5h - Bright Purple */
-.square.lvl-12 { background-color: #c026d3; } /* 3h   - Deep Fuchsia */
-.square.lvl-13 { background-color: #d946ef; } /* 3.5h - Magenta */
-.square.lvl-14 { background-color: #f43f5e; } /* 4h   - Neon Rose */
-.square.lvl-15 { background-color: #e11d48; } /* 4.5h - Crimson */
-.square.lvl-16 { background-color: #f97316; } /* 5h   - Flame Orange */
-.square.lvl-17 { background-color: #f59e0b; } /* 5.5h - Amber */
-.square.lvl-18 { background-color: #eab308; } /* 6h   - Warm Yellow */
-
-/* > 6 Hours: High Intensity Spectrum */
-.square.lvl-19 { background-color: #facc15; } /* 7h */
-.square.lvl-20 { background-color: #fef08a; } /* 8h */
-.square.lvl-21 { background-color: #ff7700; } /* 9h */
-.square.lvl-22 { background-color: #ff4400; } /* 10h */
-.square.lvl-23 { background-color: #ff0055; } /* 11h */
-.square.lvl-24 { background-color: #ff00aa; } /* 12h */
-.square.lvl-25 { 
-  background-color: #ffffff; 
-  box-shadow: 0 0 8px #fde047; /* Neon Gold Glow */
-} /* > 12h */
 .heatmap-legend {
   display: flex;
   align-items: center;
@@ -1765,17 +1893,25 @@ const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT, 10) || 18160,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'defaultdb',
-  timezone: '+05:30',         // Session timezone for IST
-  dateStrings: true,          // 🟢 CRITICAL: Prevents mysql2 from converting DATETIME/DATE into UTC JS Date objects
-  ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' ? { rejectUnauthorized: false } : false,
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT, 10) || 4000,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  timezone: '+00:00',
+  dateStrings: true,
+  ssl: {
+    minVersion: 'TLSv1.2',
+    rejectUnauthorized: true
+  },
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
+});
+
+// Ensure every new TiDB session evaluates NOW(), CURDATE(), and TIMESTAMP columns in IST
+pool.on('connection', (conn) => {
+  conn.query("SET time_zone = '+00:00';");
 });
 
 module.exports = pool;
@@ -1786,6 +1922,8 @@ module.exports = pool;
 -- Mission GATE 2027 Study Tracker Schema v3
 CREATE DATABASE IF NOT EXISTS study_tracker;
 USE study_tracker;
+SHOW CREATE TABLE study_sessions;
+SHOW CREATE TABLE pause_intervals;
 
 -- Table to store study & practice exam sessions
 CREATE TABLE IF NOT EXISTS study_sessions (
@@ -1830,24 +1968,33 @@ ALTER TABLE pause_intervals
 ADD COLUMN pause_type ENUM('short', 'long_term') DEFAULT 'short';
 
 Select * from study_sessions;
-Select * from pause_intervals;
+Select * from pause_intervals where id>1000;
+
+ALTER TABLE study_sessions AUTO_INCREMENT = 202600058;
+ALTER TABLE pause_intervals AUTO_INCREMENT = 20260001500;
+
+Select max(id) from pause_intervals;
 
 update study_sessions
 set status='long_interruption'
 where id=15;
 
--- Delete from study_sessions
--- where id=14;
+Delete from study_sessions
+where id=40;
 
--- SELECT 
---     table_name AS `Table`,
---     table_rows AS `Approximate Rows`,
---     ROUND(data_length / 1024 / 1024, 2) AS `Data Size (MB)`,
---     ROUND(index_length / 1024 / 1024, 2) AS `Index Size (MB)`,
---     ROUND((data_length + index_length) / 1024 / 1024, 2) AS `Total Storage (MB)`,
---     ROUND((data_length + index_length) / IFNULL(NULLIF(table_rows, 0), 1), 0) AS `Avg Bytes / Row`
--- FROM information_schema.tables
--- WHERE table_schema = 'study_tracker';
+SELECT 
+    table_name AS `Table`,
+    table_rows AS `Approximate Rows`,
+    ROUND(data_length / 1024 / 1024, 2) AS `Data Size (MB)`,
+    ROUND(index_length / 1024 / 1024, 2) AS `Index Size (MB)`,
+    ROUND((data_length + index_length) / 1024 / 1024, 2) AS `Total Storage (MB)`,
+    ROUND((data_length + index_length) / IFNULL(NULLIF(table_rows, 0), 1), 0) AS `Avg Bytes / Row`
+FROM information_schema.tables
+WHERE table_schema = 'study_tracker';
+
+
+ANALYZE TABLE pause_intervals;
+ANALYZE TABLE study_sessions;
 
 UPDATE study_sessions 
 SET 
@@ -1893,6 +2040,12 @@ SET total_active_seconds = GREATEST(0, (
   )
 ))
 WHERE s.id = 16;
+
+UPDATE study_sessions 
+SET total_active_seconds = 2700 
+WHERE id = (SELECT max_id FROM (SELECT MAX(id) AS max_id FROM study_sessions) t); 
+
+SELECT id, total_active_seconds, status FROM study_sessions ORDER BY id DESC LIMIT 1;
 
 
 --- [FILE: server.js] ---
@@ -1991,7 +2144,6 @@ setInterval(processActiveSessions, 2000);
 
 app.get('/api/session/current', async (req, res) => {
   try {
-    // 1. Fetch the latest active or paused session
     const [rows] = await db.query(
       `SELECT * FROM study_sessions 
        WHERE status IN ('active', 'paused', 'long_interruption') 
@@ -2001,8 +2153,8 @@ app.get('/api/session/current', async (req, res) => {
 
     const session = rows[0];
 
-    // 2. If active, calculate total elapsed seconds on the fly
-    if (session.status === 'active') {
+    // If active and total_active_seconds is uninitialized (0), derive baseline elapsed time
+    if (session.status === 'active' && (!session.total_active_seconds || session.total_active_seconds === 0)) {
       const [pauseSum] = await db.query(
         `SELECT IFNULL(SUM(TIMESTAMPDIFF(SECOND, pause_start, IFNULL(pause_end, NOW()))), 0) as total_paused 
          FROM pause_intervals WHERE session_id = ?`,
@@ -2010,16 +2162,12 @@ app.get('/api/session/current', async (req, res) => {
       );
       
       const totalPausedSeconds = pauseSum[0].total_paused || 0;
-      
-      // Elapsed = (Server NOW - start_time) - total_paused
       const [timeDiff] = await db.query(
         `SELECT TIMESTAMPDIFF(SECOND, start_time, NOW()) as total_elapsed FROM study_sessions WHERE id = ?`,
         [session.id]
       );
 
       const totalElapsedSeconds = timeDiff[0].total_elapsed || 0;
-      
-      // Override total_active_seconds with the calculated live value
       session.total_active_seconds = Math.max(0, totalElapsedSeconds - totalPausedSeconds);
     }
 
@@ -2053,14 +2201,20 @@ app.post('/api/session/start', async (req, res) => {
   try {
     await db.query(`UPDATE study_sessions SET status = 'completed', end_time = NOW() WHERE status IN ('active', 'paused')`);
 
-    const [result] = await db.query(
+    // Get ID from the last started session
+    const [lastSession] = await db.query(
+      `SELECT id FROM study_sessions ORDER BY start_time DESC, id DESC LIMIT 1`
+    );
+    const nextId = lastSession.length > 0 ? lastSession[0].id + 1 : 1;
+
+    await db.query(
       `INSERT INTO study_sessions 
-       (session_mode, subject, topic, platform, target_goal, study_type, target_duration_seconds, start_time, last_heartbeat, status, notified_50, notified_75, notified_100) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 'active', 0, 0, 0)`,
-      [session_mode || 'study', subject.trim(), topic.trim(), platform.trim(), target_goal.trim(), study_type.trim(), targetSecs]
+       (id, session_mode, subject, topic, platform, target_goal, study_type, target_duration_seconds, start_time, last_heartbeat, status, notified_50, notified_75, notified_100) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 'active', 0, 0, 0)`,
+      [nextId, session_mode || 'study', subject.trim(), topic.trim(), platform.trim(), target_goal.trim(), study_type.trim(), targetSecs]
     );
 
-    const [newSession] = await db.query(`SELECT * FROM study_sessions WHERE id = ?`, [result.insertId]);
+    const [newSession] = await db.query(`SELECT * FROM study_sessions WHERE id = ?`, [nextId]);
     res.json({ session: newSession[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2099,7 +2253,17 @@ app.post('/api/session/pause', async (req, res) => {
   const { sessionId, activeSeconds } = req.body;
   try {
     await db.query(`UPDATE study_sessions SET status = 'paused', total_active_seconds = ? WHERE id = ?`, [activeSeconds, sessionId]);
-    await db.query(`INSERT INTO pause_intervals (session_id, pause_start) VALUES (?, NOW())`, [sessionId]);
+
+    // Get ID from the last started pause
+    const [lastPause] = await db.query(
+      `SELECT id FROM pause_intervals ORDER BY pause_start DESC, id DESC LIMIT 1`
+    );
+    const nextPauseId = lastPause.length > 0 ? lastPause[0].id + 1 : 1;
+
+    await db.query(
+      `INSERT INTO pause_intervals (id, session_id, pause_start) VALUES (?, ?, NOW())`,
+      [nextPauseId, sessionId]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2184,10 +2348,12 @@ app.get('/api/analytics/summary', async (req, res) => {
 app.get('/api/analytics/heatmap', async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT DATE_FORMAT(start_time, '%Y-%m-%d') as date, SUM(total_active_seconds) as total_seconds
+      SELECT 
+        DATE_FORMAT(CONVERT_TZ(start_time, '+00:00', '+05:30'), '%Y-%m-%d') AS date,
+        SUM(total_active_seconds) AS total_seconds
       FROM study_sessions 
-      WHERE start_time >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
-      GROUP BY DATE_FORMAT(start_time, '%Y-%m-%d') 
+      WHERE start_time >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+      GROUP BY DATE_FORMAT(CONVERT_TZ(start_time, '+00:00', '+05:30'), '%Y-%m-%d') 
       ORDER BY date ASC
     `);
     res.json({ data: rows });
@@ -2237,15 +2403,21 @@ app.post('/api/session/long-interrupt', async (req, res) => {
   try {
     await db.query(`UPDATE pause_intervals SET pause_end = NOW() WHERE session_id = ? AND pause_end IS NULL`, [sessionId]);
     await db.query(`UPDATE study_sessions SET status = ?, total_active_seconds = ?, end_time = NOW() WHERE id = ?`, [newStatus, activeSeconds, sessionId]);
-    await db.query(`INSERT INTO pause_intervals (session_id, pause_start, pause_end, pause_type) VALUES (?, NOW(), NOW(), 'long_term')`, [sessionId]);
+
+    // Get ID from the last started pause
+    const [lastPause] = await db.query(
+      `SELECT id FROM pause_intervals ORDER BY pause_start DESC, id DESC LIMIT 1`
+    );
+    const nextPauseId = lastPause.length > 0 ? lastPause[0].id + 1 : 1;
+
+    await db.query(
+      `INSERT INTO pause_intervals (id, session_id, pause_start, pause_end, pause_type) VALUES (?, ?, NOW(), NOW(), 'long_term')`,
+      [nextPauseId, sessionId]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`Mission GATE 2027 Tracker running at http://localhost:${PORT}`);
 });
 
 // ADD THIS DEBUG ENDPOINT TO server.js
@@ -2293,4 +2465,9 @@ app.get('/api/debug-time', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+
+app.listen(PORT, () => {
+  console.log(`Mission GATE 2027 Tracker running at http://localhost:${PORT}`);
 });
